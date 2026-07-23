@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Meteora — a real-weather world</title>
+<meta name="description" content="Explore Earth's real weather as a living, animated low-poly world. Time-travel from 1940 to 16 days ahead, hunt live extremes, and out-predict the forecast model. Powered by Open-Meteo.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='0.9em' font-size='90'>🌍</text></svg>">
+<link rel="stylesheet" href="css/style.css">
+<script type="importmap">
+{
+  "imports": {
+    "three": "./vendor/three.module.min.js",
+    "three/addons/controls/OrbitControls.js": "./vendor/OrbitControls.js"
+  }
+}
+</script>
+</head>
+<body>
+
+<canvas id="scene"></canvas>
+<div id="vignette" aria-hidden="true"></div>
+
+<!-- Loading / transition overlay -->
+<div id="loader" class="loader">
+  <div class="loader-inner">
+    <div class="loader-orb"></div>
+    <div class="loader-title">METEORA</div>
+    <div class="loader-status" id="loader-status">waking up the atmosphere…</div>
+  </div>
+</div>
+
+<!-- Top bar -->
+<header id="topbar">
+  <div class="brand" title="Meteora — every pixel driven by real weather data">
+    <span class="brand-mark">◍</span> METEORA
+  </div>
+
+  <div class="search-wrap">
+    <input id="search" type="text" placeholder="Fly somewhere… (city, mountain, coast)" autocomplete="off" spellcheck="false">
+    <div id="search-results" class="search-results hidden"></div>
+  </div>
+
+  <nav class="topnav">
+    <button id="btn-worldnow" class="icon-btn" title="World right now — live extremes">🌐</button>
+    <button id="btn-logbook" class="icon-btn" title="Logbook — your witnessed weather">📖</button>
+    <button id="btn-duel" class="icon-btn" title="Forecast duel — beat the model">🎯</button>
+    <button id="btn-sound" class="icon-btn" title="Sound on/off">🔇</button>
+    <button id="btn-about" class="icon-btn" title="About Meteora">✦</button>
+  </nav>
+</header>
+
+<!-- Location HUD -->
+<section id="hud" class="hud hidden">
+  <div class="hud-place">
+    <h1 id="hud-name">—</h1>
+    <div id="hud-country" class="hud-sub">—</div>
+  </div>
+  <div class="hud-main">
+    <div id="hud-temp" class="hud-temp">–°</div>
+    <div class="hud-cond">
+      <div id="hud-cond-text">—</div>
+      <div id="hud-cond-time" class="hud-sub">—</div>
+    </div>
+  </div>
+  <div class="hud-stats">
+    <div class="stat" title="Wind"><span class="stat-ico">🍃</span><span id="hud-wind">—</span></div>
+    <div class="stat" title="Cloud cover"><span class="stat-ico">☁️</span><span id="hud-cloud">—</span></div>
+    <div class="stat" title="Humidity"><span class="stat-ico">💧</span><span id="hud-humidity">—</span></div>
+    <div class="stat hidden" id="hud-wave-stat" title="Wave height"><span class="stat-ico">🌊</span><span id="hud-wave">—</span></div>
+  </div>
+</section>
+
+<!-- Time machine -->
+<section id="timebar" class="timebar hidden">
+  <div class="timebar-row">
+    <button id="btn-play" class="icon-btn" title="Play time">▶</button>
+    <button id="btn-now" class="chip-btn" title="Snap back to the present">LIVE</button>
+    <div class="scrub-wrap">
+      <div id="scrub-days" class="scrub-days"></div>
+      <input id="scrub" type="range" min="0" max="100" step="0.02" value="0">
+      <div id="scrub-now-marker" class="scrub-now-marker" title="now"></div>
+    </div>
+    <button id="btn-expedition" class="chip-btn" title="Time-travel to any date since 1940">🕰 1940+</button>
+  </div>
+  <div id="expedition-form" class="expedition-form hidden">
+    <label>Expedition date <input type="date" id="expedition-date" min="1940-01-01"></label>
+    <button id="btn-expedition-go" class="chip-btn">Travel</button>
+    <span class="expedition-hint">any day since 1940 — rendered from the real historical archive</span>
+  </div>
+</section>
+
+<!-- Side panels -->
+<aside id="panel" class="panel hidden">
+  <header class="panel-head">
+    <h2 id="panel-title">Panel</h2>
+    <button id="panel-close" class="icon-btn">✕</button>
+  </header>
+  <div id="panel-body" class="panel-body"></div>
+</aside>
+
+<div id="toasts" class="toasts"></div>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
