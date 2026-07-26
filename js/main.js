@@ -10,6 +10,8 @@ import { AudioEngine } from './audio.js';
 import { Logbook } from './logbook.js';
 import { Duel } from './duel.js';
 import { WorldNow } from './worldnow.js';
+import { currentPosition, locateAvailable, labelFromTimezone } from './geo.js';
+import { Groq, MODELS } from './ai.js';
 
 // ---------- DOM ----------
 const $ = id => document.getElementById(id);
@@ -28,6 +30,8 @@ const el = {
   toasts: $('toasts'),
   btnWorldnow: $('btn-worldnow'), btnLogbook: $('btn-logbook'), btnDuel: $('btn-duel'),
   btnSound: $('btn-sound'), btnAbout: $('btn-about'),
+  btnLocate: $('btn-locate'), btnAi: $('btn-ai'),
+  dispatch: $('dispatch'), dispatchBody: $('dispatch-body'),
 };
 
 // ---------- state ----------
@@ -78,6 +82,7 @@ const duel = new Duel((p) => {
 });
 
 const worldNow = new WorldNow();
+const groq = new Groq();
 const world = new World($('scene'), { onStrike: d => audio.thunder(d) });
 
 // ---------- helpers ----------
@@ -336,6 +341,12 @@ async function loadLocation(place, expeditionDate = null) {
       world.setDiorama({ elev: elevGrid, biomeName, hasSeaHint, lat: place.lat, lon: place.lon });
     }
 
+    // a GPS fix has no name until the API tells us its timezone
+    if (place.autoName) {
+      const lbl = labelFromTimezone(tl.timezone, place.lat, place.lon);
+      place = { ...place, name: lbl.name, country: lbl.country, autoName: false };
+    }
+
     state.place = place;
     state.tl = tl;
     state.elevGrid = elevGrid;
@@ -359,6 +370,7 @@ async function loadLocation(place, expeditionDate = null) {
 
     logbook.recordVisit(place);
     checkAchievements(true);
+    requestDispatch();
 
     const url = new URL(location.href);
     url.searchParams.set('lat', place.lat.toFixed(4));
@@ -374,6 +386,70 @@ async function loadLocation(place, expeditionDate = null) {
     hideLoader();
   }
 }
+
+// ---------- AI field dispatch ----------
+let dispatchToken = 0;
+
+async function requestDispatch() {
+  const token = ++dispatchToken;
+  if (!groq.enabled || !groq.dispatchOn) {
+    el.dispatch.classList.add('hidden');
+    return;
+  }
+  el.dispatch.classList.remove('hidden');
+  el.dispatchBody.className = 'dispatch-body thinking';
+  el.dispatchBody.textContent = 'reading the air';
+
+  try {
+    const cond = condAt(state.timeIdx);
+    const tMs = timeMs();
+    const sun = sunPosition(tMs, state.place.lat, state.place.lon);
+    const text = await groq.dispatch({
+      place: state.place,
+      cond,
+      condLabel: describeCode(cond.code).label,
+      localTime: fmtLocal(tMs, state.tl.mode === 'expedition'),
+      sunAltDeg: sun.altitude * 180 / Math.PI,
+      mode: state.tl.mode,
+      biome: world.diorama ? world.diorama.biomeName : 'unknown',
+      hasSea: world.diorama ? !!world.diorama.hasSea : false,
+    });
+    if (token !== dispatchToken) return; // a newer location won the race
+    el.dispatchBody.className = 'dispatch-body';
+    el.dispatchBody.textContent = text;
+  } catch (err) {
+    if (token !== dispatchToken) return;
+    el.dispatch.classList.add('hidden');
+    groq.lastError = err.message;
+    console.warn('dispatch failed:', err.message);
+  }
+}
+
+// ---------- locate me ----------
+el.btnLocate.addEventListener('click', async () => {
+  audio.unlock();
+  if (!locateAvailable()) {
+    toast(`<span class="t-ico">📍</span><span><b>No geolocation here</b><span class="t-sub">This device or browser can't provide a position.</span></span>`, '', 6000);
+    return;
+  }
+  el.btnLocate.classList.add('attention');
+  showLoader('asking your device where you are…');
+  try {
+    const pos = await currentPosition();
+    await loadLocation({
+      name: 'Your location',
+      country: '',
+      lat: pos.lat,
+      lon: pos.lon,
+      autoName: true,
+    });
+  } catch (err) {
+    hideLoader();
+    toast(`<span class="t-ico">📍</span><span><b>Couldn't locate you</b><span class="t-sub">${err.message}</span></span>`, '', 7000);
+  } finally {
+    el.btnLocate.classList.remove('attention');
+  }
+});
 
 // ---------- playback controls ----------
 function setPlaying(playing) {
@@ -433,6 +509,14 @@ function closeSearch() {
   searchHits = [];
 }
 
+// A request like "somewhere it's snowing right now" is not a place name — offer it to
+// the model instead of the gazetteer. Only shown when a Groq key is present.
+function looksLikeRequest(q) {
+  const s = q.trim().toLowerCase();
+  if (s.split(/\s+/).length >= 4) return true;
+  return /\b(where|somewhere|anywhere|find|take me|show me|coldest|hottest|storm|snowing|raining|windiest)\b/.test(s);
+}
+
 el.search.addEventListener('input', () => {
   clearTimeout(searchTimer);
   const q = el.search.value;
@@ -441,11 +525,21 @@ el.search.addEventListener('input', () => {
     try {
       searchHits = await geocode(q);
     } catch { searchHits = []; }
-    if (!searchHits.length) { closeSearch(); return; }
+
+    const offerAi = groq.enabled && looksLikeRequest(q);
+    if (!searchHits.length && !offerAi) { closeSearch(); return; }
+
     el.searchResults.innerHTML = '';
+    if (offerAi) {
+      const btn = document.createElement('button');
+      btn.className = 'search-result ai-row-item active';
+      btn.innerHTML = `<span class="sr-ai">✨ Ask AI to find it</span><span class="sr-meta">${q.length > 42 ? q.slice(0, 42) + '…' : q}</span>`;
+      btn.addEventListener('click', () => askAiToTravel(q));
+      el.searchResults.appendChild(btn);
+    }
     searchHits.forEach((r, i) => {
       const btn = document.createElement('button');
-      btn.className = 'search-result' + (i === 0 ? ' active' : '');
+      btn.className = 'search-result' + (i === 0 && !offerAi ? ' active' : '');
       btn.innerHTML = `<span>${r.name}</span><span class="sr-meta">${[r.admin, r.country].filter(Boolean).join(', ')}</span>`;
       btn.addEventListener('click', () => pickResult(r));
       el.searchResults.appendChild(btn);
@@ -453,6 +547,26 @@ el.search.addEventListener('input', () => {
     el.searchResults.classList.remove('hidden');
   }, 300);
 });
+
+async function askAiToTravel(query) {
+  closeSearch();
+  el.search.value = '';
+  el.search.blur();
+  audio.unlock();
+  showLoader('asking the model where to go…');
+  try {
+    const live = await worldNow.refresh().catch(() => null);
+    const dest = await groq.pickDestination(query, live);
+    hideLoader();
+    if (dest.why) {
+      toast(`<span class="t-ico">✨</span><span><b>${dest.name}${dest.country ? `, ${dest.country}` : ''}</b><span class="t-sub">${dest.why}</span></span>`, '', 7000);
+    }
+    await loadLocation({ name: dest.name, country: dest.country, lat: dest.lat, lon: dest.lon });
+  } catch (err) {
+    hideLoader();
+    toast(`<span class="t-ico">✨</span><span><b>AI travel failed</b><span class="t-sub">${err.message}</span></span>`, '', 7000);
+  }
+}
 
 function pickResult(r) {
   closeSearch();
@@ -511,6 +625,85 @@ el.btnWorldnow.addEventListener('click', () => {
   });
 });
 
+el.btnAi.addEventListener('click', () => {
+  openPanel('ai', '✨ AI Features', body => {
+    const models = MODELS.map(m =>
+      `<option value="${m.id}"${m.id === groq.model ? ' selected' : ''}>${m.label}</option>`).join('');
+    body.innerHTML = `
+      <div class="ai-status ${groq.enabled ? 'on' : ''}" id="ai-status">
+        ${groq.enabled ? '● Connected — AI features are live' : '○ Dormant — add a key to switch these on'}
+      </div>
+      <p>Two things the model does, both grounded in the same real Open-Meteo numbers the
+      world is built from — it narrates and chooses, it never invents weather.</p>
+      <p><b>Field dispatch</b> — a two-sentence description of what you're standing in,
+      written on arrival at every place.<br>
+      <b>Natural-language travel</b> — type something like <i>"somewhere it's snowing right
+      now"</i> into the search box and pick the ✨ row.</p>
+
+      <h3>Your Groq API key</h3>
+      <div class="ai-field">
+        <label for="ai-key">key (stored only in this browser)</label>
+        <input type="password" id="ai-key" placeholder="gsk_…" value="${groq.key ? groq.key.replace(/./g, '•') : ''}" autocomplete="off" spellcheck="false">
+      </div>
+      <div class="ai-field">
+        <label for="ai-model">model</label>
+        <select id="ai-model">${models}</select>
+      </div>
+      <div class="ai-row">
+        <button class="chip-btn" id="ai-save">Save</button>
+        <button class="chip-btn" id="ai-clear">Clear key</button>
+        <label class="ai-toggle"><input type="checkbox" id="ai-dispatch" ${groq.dispatchOn ? 'checked' : ''}> field dispatch on arrival</label>
+      </div>
+      <div id="ai-msg"></div>
+      <p style="margin-top:14px">Get a free key at
+      <a href="https://console.groq.com/keys" target="_blank" rel="noopener">console.groq.com/keys</a>.
+      It is stored in this browser's localStorage and sent only to Groq — never to this site
+      (there is no server) and never to Open-Meteo. Clear it any time above.</p>`;
+
+    const keyInput = body.querySelector('#ai-key');
+    const msg = body.querySelector('#ai-msg');
+    keyInput.addEventListener('focus', () => { if (keyInput.value.startsWith('•')) keyInput.value = ''; });
+
+    body.querySelector('#ai-save').addEventListener('click', () => {
+      const v = keyInput.value.trim();
+      if (v && !v.startsWith('•')) groq.setKey(v);
+      groq.setModel(body.querySelector('#ai-model').value);
+      groq.setDispatch(body.querySelector('#ai-dispatch').checked);
+      msg.className = 'ai-ok';
+      msg.textContent = groq.enabled ? 'Saved. AI features are live.' : 'Saved. Add a key to switch AI features on.';
+      body.querySelector('#ai-status').className = `ai-status ${groq.enabled ? 'on' : ''}`;
+      body.querySelector('#ai-status').textContent = groq.enabled
+        ? '● Connected — AI features are live'
+        : '○ Dormant — add a key to switch these on';
+      syncAiIcon();
+      requestDispatch();
+    });
+
+    body.querySelector('#ai-clear').addEventListener('click', () => {
+      groq.setKey('');
+      keyInput.value = '';
+      msg.className = 'ai-ok';
+      msg.textContent = 'Key removed from this browser.';
+      body.querySelector('#ai-status').className = 'ai-status';
+      body.querySelector('#ai-status').textContent = '○ Dormant — add a key to switch these on';
+      syncAiIcon();
+      el.dispatch.classList.add('hidden');
+    });
+
+    body.querySelector('#ai-dispatch').addEventListener('change', (ev) => {
+      groq.setDispatch(ev.target.checked);
+      if (ev.target.checked) requestDispatch();
+      else el.dispatch.classList.add('hidden');
+    });
+  });
+});
+
+function syncAiIcon() {
+  el.btnAi.title = groq.enabled ? 'AI features (Groq) — connected' : 'AI features (Groq) — add a key';
+  el.btnAi.style.opacity = groq.enabled ? '1' : '0.62';
+}
+syncAiIcon();
+
 el.btnAbout.addEventListener('click', () => {
   openPanel('about', '✦ About Meteora', body => {
     body.innerHTML = `
@@ -524,6 +717,9 @@ el.btnAbout.addEventListener('click', () => {
       <h3>Forecast duel</h3>
       <p>Call tomorrow's high anywhere on Earth. The model locks its forecast at the same
       moment; the recorded actual settles it the next day.</p>
+      <h3>Your location & AI</h3>
+      <p>📍 drops you where you actually are. ✨ optionally connects a Groq key for
+      field dispatches and natural-language travel — everything else works without it.</p>
       <h3>Data & credits</h3>
       <p>Weather, marine, geocoding and elevation data by
       <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo.com</a>

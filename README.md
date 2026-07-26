@@ -36,8 +36,17 @@ no build step. One static folder.
 - **🌐 World right now.** One batched call across ~36 places surfaces the live extremes —
   hottest, coldest, windiest, and every storm in progress — so hunting achievements is
   discovery, not tedium.
+- **📍 Your own location.** One tap drops you exactly where you are, named from the
+  timezone Open-Meteo reports back. Works in the browser and in the Android app (which
+  asks for the OS location permission the first time).
 - **Procedural sound.** Wind, rain and distance-delayed thunder are synthesized in
   WebAudio from the same data. 🔇/🔊 toggle in the top bar.
+- **✨ Optional AI (Groq).** Bring your own key and two things switch on: a two-sentence
+  **field dispatch** describing what you're standing in on arrival, and
+  **natural-language travel** — type *"somewhere it's snowing right now"* and the model
+  picks a real destination using the live world sample. Both are grounded in the same
+  Open-Meteo numbers the world is built from: the model narrates and chooses, it never
+  invents weather. Everything else works exactly the same without a key.
 
 ## Run it
 
@@ -69,6 +78,24 @@ plug in the phone and open `chrome://inspect` on the laptop to get full DevTools
 (For a quick look without Android Studio: `python3 -m http.server 8000` on the laptop,
 then visit `http://<laptop-ip>:8000` from the phone's browser on the same Wi-Fi.)
 
+## Optional: connecting Groq
+
+AI features are dormant until you add a key — the app never ships one and has no server
+to hold one.
+
+1. Get a free key at [console.groq.com/keys](https://console.groq.com/keys).
+2. Open the **✨** panel in the app, paste it, press **Save**.
+
+The key is stored in your browser's `localStorage` and sent only to Groq's API — never to
+this site (there is nothing to send it to) and never to Open-Meteo. Clear it any time from
+the same panel. Model is switchable between Llama 3.3 70B (better writing) and 3.1 8B
+(faster).
+
+Because the call goes straight from the page to `api.groq.com`, it depends on Groq
+permitting browser-origin requests. If your browser blocks it as a cross-origin request,
+the app says so plainly and everything else keeps working; the fix in that case is to put
+a small proxy in front of Groq, which trades away the "static, no backend" property.
+
 ## How it holds up under traffic
 
 Everything runs in the visitor's browser against Open-Meteo's public, keyless APIs
@@ -83,6 +110,8 @@ css/style.css         glass-and-glow UI chrome
 js/
   main.js             app state, time machine, search, panels, boot
   api.js              Open-Meteo clients: forecast, archive, marine, elevation, geocoding
+  geo.js              device geolocation + timezone-derived place naming
+  ai.js               optional Groq client: field dispatch, natural-language travel
   solar.js            astronomical sun/moon position (the sky never lies)
   palette.js          WMO code semantics + the one place that owns all color grading
   audio.js            procedural WebAudio wind/rain/thunder

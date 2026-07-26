@@ -42,6 +42,8 @@
   </div>
 
   <nav class="topnav">
+    <button id="btn-locate" class="icon-btn" title="Use my current location">📍</button>
+    <button id="btn-ai" class="icon-btn" title="AI features (Groq)">✨</button>
     <button id="btn-worldnow" class="icon-btn" title="World right now — live extremes">🌐</button>
     <button id="btn-logbook" class="icon-btn" title="Logbook — your witnessed weather">📖</button>
     <button id="btn-duel" class="icon-btn" title="Forecast duel — beat the model">🎯</button>
@@ -68,6 +70,10 @@
     <div class="stat" title="Cloud cover"><span class="stat-ico">☁️</span><span id="hud-cloud">—</span></div>
     <div class="stat" title="Humidity"><span class="stat-ico">💧</span><span id="hud-humidity">—</span></div>
     <div class="stat hidden" id="hud-wave-stat" title="Wave height"><span class="stat-ico">🌊</span><span id="hud-wave">—</span></div>
+  </div>
+  <div id="dispatch" class="dispatch hidden">
+    <div class="dispatch-label">field dispatch</div>
+    <div id="dispatch-body" class="dispatch-body"></div>
   </div>
 </section>
 

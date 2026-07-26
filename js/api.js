@@ -52,7 +52,7 @@ export async function geocode(query) {
 }
 
 // Shared shape for both live and expedition windows: hourly arrays + unix times (UTC seconds).
-function packTimeline(hourly, marineHourly, utcOffsetSeconds, daily) {
+function packTimeline(hourly, marineHourly, utcOffsetSeconds, daily, timezone) {
   const n = hourly.time.length;
   const num = (arr, i, fallback = 0) => {
     const v = arr ? arr[i] : null;
@@ -75,7 +75,7 @@ function packTimeline(hourly, marineHourly, utcOffsetSeconds, daily) {
       waveP: marineHourly ? num(marineHourly.wave_period, i, 6) : null,
     };
   }
-  return { hours, utcOffsetSeconds, daily: daily || null };
+  return { hours, utcOffsetSeconds, daily: daily || null, timezone: timezone || null };
 }
 
 function marineIsUseful(marine) {
@@ -100,6 +100,7 @@ export async function fetchTimelineLive(lat, lon) {
     marineIsUseful(marine) ? marine.hourly : null,
     forecast.utc_offset_seconds || 0,
     forecast.daily,
+    forecast.timezone,
   );
   tl.mode = 'live';
   return tl;
@@ -129,6 +130,7 @@ export async function fetchTimelineArchive(lat, lon, dateStr) {
     marineIsUseful(marine) ? marine.hourly : null,
     archive.utc_offset_seconds || 0,
     archive.daily,
+    archive.timezone,
   );
   tl.mode = 'expedition';
   tl.expeditionDate = dateStr;

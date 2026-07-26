@@ -226,6 +226,89 @@ html, body {
 .hud.time-traveling { border-color: var(--accent-warm); }
 .hud.time-traveling .hud-cond-time { color: var(--accent-warm); }
 
+/* AI field dispatch */
+.dispatch {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255,255,255,0.08);
+  animation: dispatch-in 0.6s cubic-bezier(0.2, 0.9, 0.25, 1);
+}
+@keyframes dispatch-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: none; }
+}
+.dispatch-label {
+  font-size: 9.5px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 4px;
+}
+.dispatch-body {
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: rgba(234, 242, 255, 0.85);
+  font-style: italic;
+}
+.dispatch-body.thinking { color: var(--ink-dim); font-style: normal; }
+.dispatch-body.thinking::after {
+  content: '';
+  display: inline-block;
+  width: 1.4em;
+  text-align: left;
+  animation: dots 1.2s steps(4, end) infinite;
+}
+@keyframes dots {
+  0% { content: ''; } 25% { content: '·'; } 50% { content: '··'; } 75% { content: '···'; }
+}
+
+/* AI settings panel */
+.ai-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--stroke);
+  background: rgba(255,255,255,0.03);
+  font-size: 12.5px;
+  margin-bottom: 14px;
+}
+.ai-status.on { border-color: var(--good); color: var(--good); }
+.ai-field { margin-bottom: 12px; }
+.ai-field label {
+  display: block;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  margin-bottom: 6px;
+}
+.ai-field input[type="password"],
+.ai-field input[type="text"],
+.ai-field select {
+  width: 100%;
+  padding: 9px 12px;
+  border-radius: 10px;
+  border: 1px solid var(--stroke);
+  background: rgba(255,255,255,0.07);
+  color: var(--ink);
+  font-family: var(--mono);
+  font-size: 12.5px;
+  outline: none;
+  color-scheme: dark;
+}
+.ai-field input:focus, .ai-field select:focus { border-color: var(--accent); }
+.ai-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.ai-toggle { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--ink-dim); }
+.ai-toggle input { accent-color: var(--accent); width: 16px; height: 16px; }
+.ai-err { color: var(--bad); font-size: 12px; margin-top: 8px; }
+.ai-ok { color: var(--good); font-size: 12px; margin-top: 8px; }
+
+/* AI suggestion row in the search dropdown */
+.search-result.ai-row-item { border-bottom: 1px solid rgba(127,212,255,0.25); }
+.search-result.ai-row-item .sr-ai { color: var(--accent); font-weight: 700; }
+
 /* ---------- time machine ---------- */
 
 .timebar {
