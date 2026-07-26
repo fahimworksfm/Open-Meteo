@@ -1,0 +1,54 @@
+plugins {
+    id 'com.android.application'
+}
+
+// The web app is the repo root; copy it into generated assets at build time so the
+// APK always ships the current index.html / js / css / vendored three.js.
+def webSrcDir = rootProject.projectDir.parentFile
+def webAssetsDir = layout.buildDirectory.dir('generated/webAssets')
+
+tasks.register('copyWebAssets', Copy) {
+    from(webSrcDir) {
+        include 'index.html', 'css/**', 'js/**', 'vendor/**'
+    }
+    into webAssetsDir
+}
+
+android {
+    namespace 'com.meteora.app'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'com.meteora.app'
+        minSdk 26
+        targetSdk 34
+        versionCode 1
+        versionName '1.0'
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+        }
+    }
+
+    sourceSets {
+        main {
+            assets.srcDirs += [webAssetsDir.get().asFile]
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+preBuild.dependsOn 'copyWebAssets'
+tasks.matching { it.name.toLowerCase().contains('assets') && it.name != 'copyWebAssets' }.configureEach {
+    dependsOn 'copyWebAssets'
+}
+
+dependencies {
+    implementation 'androidx.webkit:webkit:1.11.0'
+}

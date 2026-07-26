@@ -51,6 +51,24 @@ python3 -m http.server 8000
 Deploying is the same story: GitHub Pages, Netlify, Cloudflare Pages — point at the repo
 root, done. There is no build step; `three.js` is vendored in `vendor/`.
 
+## Run it on Android
+
+The repo includes a native shell in [`android/`](android/):
+
+1. Open the **`android/`** folder in Android Studio (File → Open — pick `android/`,
+   not the repo root).
+2. Let Gradle sync (the wrapper is committed; first sync downloads Gradle 8.7 + AGP).
+3. Select your connected phone and press **Run ▶**.
+
+The shell is a single-activity WebView served through `WebViewAssetLoader`, so ES
+modules, `fetch()` to Open-Meteo and `localStorage` behave exactly like a browser.
+The web app at the repo root is copied into the APK's assets automatically on every
+build — edit `js/`/`css/` and just re-run. Debug builds enable WebView inspection:
+plug in the phone and open `chrome://inspect` on the laptop to get full DevTools.
+
+(For a quick look without Android Studio: `python3 -m http.server 8000` on the laptop,
+then visit `http://<laptop-ip>:8000` from the phone's browser on the same Wi-Fi.)
+
 ## How it holds up under traffic
 
 Everything runs in the visitor's browser against Open-Meteo's public, keyless APIs

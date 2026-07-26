@@ -63,7 +63,7 @@ html, body {
   display: flex;
   align-items: center;
   gap: 14px;
-  padding: 14px 18px;
+  padding: calc(14px + env(safe-area-inset-top, 0px)) calc(18px + env(safe-area-inset-right, 0px)) 14px calc(18px + env(safe-area-inset-left, 0px));
   z-index: 30;
   pointer-events: none;
 }
@@ -173,8 +173,8 @@ html, body {
 
 .hud {
   position: fixed;
-  left: 18px;
-  top: 76px;
+  left: calc(18px + env(safe-area-inset-left, 0px));
+  top: calc(76px + env(safe-area-inset-top, 0px));
   z-index: 20;
   padding: 16px 20px;
   border-radius: var(--radius);
@@ -231,7 +231,7 @@ html, body {
 .timebar {
   position: fixed;
   left: 50%;
-  bottom: 18px;
+  bottom: calc(18px + env(safe-area-inset-bottom, 0px));
   transform: translateX(-50%);
   z-index: 25;
   width: min(860px, calc(100vw - 32px));
@@ -333,9 +333,9 @@ html, body {
 
 .panel {
   position: fixed;
-  top: 70px;
-  right: 16px;
-  bottom: 96px;
+  top: calc(70px + env(safe-area-inset-top, 0px));
+  right: calc(16px + env(safe-area-inset-right, 0px));
+  bottom: calc(96px + env(safe-area-inset-bottom, 0px));
   z-index: 35;
   width: min(400px, calc(100vw - 32px));
   border-radius: var(--radius);
