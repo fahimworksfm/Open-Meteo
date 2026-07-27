@@ -3,6 +3,7 @@
 
 import { fetchWorldNow } from './api.js';
 import { describeCode } from './palette.js';
+import { temp, wind } from './units.js';
 
 const PLACES = [
   { name: 'Reykjavík', country: 'Iceland', lat: 64.15, lon: -21.94 },
@@ -98,12 +99,12 @@ export class WorldNow {
       return el;
     };
 
-    wrap.appendChild(card('🔥', 'hottest right now', hottest, `${Math.round(hottest.temp)}°`));
-    wrap.appendChild(card('🧊', 'coldest right now', coldest, `${Math.round(coldest.temp)}°`));
-    wrap.appendChild(card('💨', 'windiest right now', windiest, `${Math.round(windiest.wind)} km/h`));
-    for (const s of storms.slice(0, 4)) wrap.appendChild(card('⛈️', 'thunderstorm in progress', s, `${Math.round(s.temp)}°`));
-    for (const s of snowing.slice(0, 3)) wrap.appendChild(card('🌨️', 'snowing right now', s, `${Math.round(s.temp)}°`));
-    for (const s of raining.slice(0, 3)) wrap.appendChild(card('🌧️', 'raining right now', s, `${Math.round(s.temp)}°`));
+    wrap.appendChild(card('🔥', 'hottest right now', hottest, temp(hottest.temp)));
+    wrap.appendChild(card('🧊', 'coldest right now', coldest, temp(coldest.temp)));
+    wrap.appendChild(card('💨', 'windiest right now', windiest, wind(windiest.wind)));
+    for (const s of storms.slice(0, 4)) wrap.appendChild(card('⛈️', 'thunderstorm in progress', s, temp(s.temp)));
+    for (const s of snowing.slice(0, 3)) wrap.appendChild(card('🌨️', 'snowing right now', s, temp(s.temp)));
+    for (const s of raining.slice(0, 3)) wrap.appendChild(card('🌧️', 'raining right now', s, temp(s.temp)));
     frag.appendChild(wrap);
 
     const upd = document.createElement('div');

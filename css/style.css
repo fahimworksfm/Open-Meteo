@@ -169,6 +169,30 @@ html, body {
 .chip-btn:hover { background: rgba(127, 212, 255, 0.16); border-color: var(--accent); }
 .chip-btn.live-on { border-color: var(--good); color: var(--good); box-shadow: 0 0 12px rgba(125, 255, 176, 0.25); }
 
+.units-btn {
+  font-size: 12.5px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* imagery / data credit, required by the tile providers */
+.attribution {
+  position: fixed;
+  left: calc(14px + env(safe-area-inset-left, 0px));
+  bottom: calc(6px + env(safe-area-inset-bottom, 0px));
+  z-index: 15;
+  max-width: min(46vw, 520px);
+  font-size: 10px;
+  line-height: 1.35;
+  color: rgba(234, 242, 255, 0.5);
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.8);
+  pointer-events: none;
+}
+@media (max-width: 720px) {
+  .attribution { max-width: calc(100vw - 28px); bottom: calc(2px + env(safe-area-inset-bottom, 0px)); }
+}
+
 /* ---------- HUD ---------- */
 
 .hud {

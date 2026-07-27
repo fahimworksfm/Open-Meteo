@@ -3,6 +3,7 @@
 // recorded maximum) settles who was closer. All state lives in localStorage.
 
 import { fetchActualMaxTemp, fetchModelMaxTemp } from './api.js';
+import { temp, tempToDisplay, tempFromDisplay, tempStep, tempScaleLabel, toF, units } from './units.js';
 
 const KEY = 'meteora.duel.v1';
 
@@ -99,12 +100,15 @@ export class Duel {
         form.innerHTML = `<div class="dp-title">🎯 ${currentPlace.name} — ${date}</div>
           <div class="duel-note">Your call is locked in. Come back after the day ends to see who was closer.</div>`;
       } else {
-        const start = Math.round(refTemp ?? 15);
+        // the slider lives in whatever units are on screen; guesses are stored in °C
+        const startC = refTemp ?? 15;
+        const start = Math.round(tempToDisplay(startC));
+        const spread = units.imperial ? 45 : 25;
         form.innerHTML = `
           <div class="dp-title">🎯 Call tomorrow's high — ${currentPlace.name}, ${date}</div>
           <div class="duel-guess-row">
-            <input type="range" id="duel-slider" min="${start - 25}" max="${start + 25}" step="0.5" value="${start}">
-            <div class="duel-guess-val" id="duel-val">${start}°</div>
+            <input type="range" id="duel-slider" min="${start - spread}" max="${start + spread}" step="${tempStep()}" value="${start}">
+            <div class="duel-guess-val" id="duel-val">${start}°${tempScaleLabel().slice(1)}</div>
           </div>
           <div style="margin-top:10px"><button class="chip-btn" id="duel-place-btn">Lock it in</button></div>
           <div class="duel-note">The model locks its own forecast at the same moment. Reality decides tomorrow. Beat the supercomputer.</div>`;
@@ -114,11 +118,12 @@ export class Duel {
       if (!already) {
         const slider = form.querySelector('#duel-slider');
         const val = form.querySelector('#duel-val');
-        slider.addEventListener('input', () => { val.textContent = `${slider.value}°`; });
+        const scale = tempScaleLabel().slice(1);
+        slider.addEventListener('input', () => { val.textContent = `${slider.value}°${scale}`; });
         form.querySelector('#duel-place-btn').addEventListener('click', async (ev) => {
           ev.target.disabled = true;
           ev.target.textContent = 'Locking…';
-          const res = await this.place(currentPlace, utcOffsetSeconds, parseFloat(slider.value));
+          const res = await this.place(currentPlace, utcOffsetSeconds, tempFromDisplay(parseFloat(slider.value)));
           if (res.ok && onPlaced) onPlaced(res.prediction);
           else if (!res.ok) { ev.target.disabled = false; ev.target.textContent = 'Lock it in'; }
         });
@@ -137,16 +142,18 @@ export class Duel {
     for (const p of this.state.predictions.slice(0, 15)) {
       const el = document.createElement('div');
       el.className = 'duel-item';
+      // errors are differences, so they scale by 9/5 rather than converting as temperatures
+      const errFmt = e => (units.imperial ? e * 9 / 5 : e).toFixed(1);
       if (p.resolved) {
         const cls = p.outcome;
         const label = p.outcome === 'win' ? 'YOU WIN' : (p.outcome === 'loss' ? 'MODEL WINS' : 'DRAW');
         el.innerHTML = `
           <div class="di-head"><span>${p.name} · ${p.date}</span><span class="${cls}">${label}</span></div>
-          <div class="di-sub">you ${p.guess}° (off ${p.errUser.toFixed(1)}) · model ${p.model}° (off ${p.errModel.toFixed(1)}) · actual ${p.actual}°</div>`;
+          <div class="di-sub">you ${temp(p.guess, { decimals: 1 })} (off ${errFmt(p.errUser)}) · model ${temp(p.model, { decimals: 1 })} (off ${errFmt(p.errModel)}) · actual ${temp(p.actual, { decimals: 1 })}</div>`;
       } else {
         el.innerHTML = `
           <div class="di-head"><span>${p.name} · ${p.date}</span><span>⏳ pending</span></div>
-          <div class="di-sub">you ${p.guess}° · model ${p.model}° · settles when the day ends</div>`;
+          <div class="di-sub">you ${temp(p.guess, { decimals: 1 })} · model ${temp(p.model, { decimals: 1 })} · settles when the day ends</div>`;
       }
       list.appendChild(el);
     }

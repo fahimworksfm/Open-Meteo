@@ -1,3 +1,5 @@
+import { units, toF, toMph, toInches, toFeet } from './units.js';
+
 // ai.js — optional Groq layer. Two jobs, both grounded in real Open-Meteo numbers:
 //   1. a short "field dispatch" describing what you're standing in on arrival
 //   2. natural-language travel ("somewhere it's snowing right now")
@@ -90,17 +92,20 @@ export class Groq {
       : sunAltDeg > -6 ? 'twilight'
       : 'night';
 
+    // give the model the same units the reader is seeing, so any number it echoes matches
+    const imp = units.imperial;
     const facts = [
       `place: ${place.name}${place.country ? `, ${place.country}` : ''}`,
       `local time: ${localTime}`,
       `conditions: ${condLabel}`,
-      `temperature: ${cond.temp.toFixed(1)} °C`,
-      `wind: ${cond.windSpeed.toFixed(0)} km/h from ${windDir}`,
+      `temperature: ${imp ? `${toF(cond.temp).toFixed(0)} °F` : `${cond.temp.toFixed(1)} °C`}`,
+      `wind: ${imp ? `${toMph(cond.windSpeed).toFixed(0)} mph` : `${cond.windSpeed.toFixed(0)} km/h`} from ${windDir}`,
       `cloud cover: ${Math.round(cond.cloud)}%`,
       `humidity: ${Math.round(cond.humidity)}%`,
-      `precipitation: ${cond.precip.toFixed(1)} mm/h`,
-      cond.snowfall > 0 ? `snowfall: ${cond.snowfall.toFixed(1)} cm/h` : null,
-      cond.waveH !== null && cond.waveH !== undefined ? `sea state: ${cond.waveH.toFixed(1)} m waves` : null,
+      `precipitation: ${imp ? `${toInches(cond.precip).toFixed(2)} in/h` : `${cond.precip.toFixed(1)} mm/h`}`,
+      cond.snowfall > 0 ? `snowfall: ${imp ? `${toInches(cond.snowfall * 10).toFixed(1)} in/h` : `${cond.snowfall.toFixed(1)} cm/h`}` : null,
+      cond.waveH !== null && cond.waveH !== undefined
+        ? `sea state: ${imp ? `${toFeet(cond.waveH).toFixed(0)} ft` : `${cond.waveH.toFixed(1)} m`} waves` : null,
       `light: ${light}`,
       `terrain: ${biome}${hasSea ? ', on the coast' : ''}`,
       mode === 'expedition' ? 'NOTE: this is a historical archive date, not the present — write in past tense.' : null,

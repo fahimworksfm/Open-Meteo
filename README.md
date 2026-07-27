@@ -14,10 +14,15 @@ no build step. One static folder.
 
 ## What it is
 
-- **A terrain-aware diorama.** Search anywhere. A 9×9 grid of real ground elevations
-  (Open-Meteo elevation API) sets the bones of a procedural low-poly scene; the marine API
-  decides whether a living sea laps at it; latitude and the local climate pick the biome
-  palette and vegetation. Every location looks like *itself*.
+- **🛰 Two worlds, same weather.** *Satellite mode* (the default) builds the scene from
+  real elevation tiles wearing real aerial imagery — an actual cut block of the ground
+  you're looking at, roughly 16 km across. *Stylized mode* is a procedural low-poly
+  diorama: a 9×9 grid of real elevations (Open-Meteo) sets the bones, the marine API
+  decides whether a living sea laps at it, and latitude plus local climate pick the biome
+  palette and vegetation. One button switches between them; both are lit and weathered by
+  identical live numbers.
+- **°C / °F.** One tap converts every reading in the app — temperature, wind, precipitation,
+  wave height, even the duel slider and what the AI is told. Nothing refetches.
 - **Weather that is honest.** Sun and moon positions are computed astronomically for the
   place and moment you're viewing. Cloud cover, precipitation, fog, snow cover, wind sway,
   wave height, storm light and lightning are all driven by the actual data — the scene
@@ -123,6 +128,8 @@ js/
   worldnow.js         batched live-extremes sampler
   scene/
     world.js          renderer, camera, lights, frame loop
+    tiles.js          keyless terrain + satellite imagery tiles, terrarium decoding
+    realterrain.js    photoreal mode: real heightfield, draped imagery, cut-block skirt
     sky.js            gradient dome shader, sun/moon, stars, drifting cloud fleet
     terrain.js        procedural diorama: elevation grid → heightfield → biome-painted
                       low-poly mesh, sea with real waves, instanced trees/rocks,
@@ -134,9 +141,25 @@ Data flow is one-directional and per-frame: *timeline hour (interpolated) → co
 solar position → color grade → uniforms*. The 3D world is a pure function of real data
 and time.
 
+## Why not Google Maps / Google Earth?
+
+Google's Photorealistic 3D Tiles (the Google Earth mesh) would look spectacular and do
+work with three.js — but they need an API key *with billing enabled*, are metered per
+request, and the terms forbid caching while requiring Google's attribution on screen.
+That would end the "no key, deploy anywhere, hand the link to anyone" property that makes
+this thing shareable. The satellite mode above gets most of the way there from services
+that need no key at all. If you ever do want it, the clean way in would be the same
+bring-your-own-key pattern the ✨ AI panel already uses.
+
 ## Credits
 
 - Weather, marine, geocoding and elevation data by [Open-Meteo.com](https://open-meteo.com/),
   licensed [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
+- Satellite/aerial imagery © [Esri](https://www.esri.com/), Maxar, Earthstar Geographics,
+  via the World Imagery basemap.
+- Terrain elevation tiles from the [Mapzen/Tilezen](https://github.com/tilezen/joerd)
+  open dataset hosted on AWS, built from SRTM, ETOPO1 and national elevation surveys.
+- Reverse geocoding for 📍 by [BigDataCloud](https://www.bigdatacloud.com/)'s free
+  client endpoint.
 - Rendering: [three.js](https://threejs.org/) (MIT, vendored — license in `vendor/THREE-LICENSE.txt`).
 - No tracking, no accounts; your logbook and duels live in your own browser.

@@ -6,6 +6,7 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { Sky } from './sky.js';
 import { Diorama } from './terrain.js';
+import { RealTerrain } from './realterrain.js';
 import { Precipitation, Lightning } from './effects.js';
 
 export class World {
@@ -67,13 +68,34 @@ export class World {
     if (this.diorama) this.diorama.dispose();
     this.diorama = new Diorama(params);
     this.scene.add(this.diorama.group);
-
-    // frame the camera to the new terrain
-    const focusY = Math.min(Math.max(this.diorama.maxY * 0.45, 4), 16);
-    this.controls.target.set(0, focusY, 0);
-    this.camera.position.set(46, Math.max(26, this.diorama.maxY * 0.9 + 14), 62);
-    this.controls.autoRotate = true;
+    this._frameCamera();
     return this.diorama;
+  }
+
+  // photoreal mode: real elevation wearing real satellite imagery
+  setRealTerrain(tileData, { lat, lon } = {}) {
+    if (this.diorama) this.diorama.dispose();
+    this.diorama = new RealTerrain(tileData, { lat, lon });
+    this.scene.add(this.diorama.group);
+    this._frameCamera();
+    return this.diorama;
+  }
+
+  _frameCamera() {
+    const maxY = this.diorama.maxY;
+    // terrains declare their own framing; the stylized diorama uses the close default
+    const f = this.diorama.framing || { distance: 77, pitch: 0.42, maxDistance: 170 };
+    const focusY = Math.min(Math.max(maxY * 0.45, 4), 16);
+    this.controls.target.set(0, focusY, 0);
+
+    const horiz = Math.cos(f.pitch) * f.distance;
+    this.camera.position.set(
+      horiz * 0.6,
+      Math.max(f.distance * Math.sin(f.pitch), maxY * 1.15 + 10),
+      horiz * 0.8,
+    );
+    this.controls.maxDistance = f.maxDistance;
+    this.controls.autoRotate = true;
   }
 
   // env: { cond, grade, sunDir, moonDir, moonPhase, windVec, windKmh }

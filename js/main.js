@@ -12,6 +12,9 @@ import { Duel } from './duel.js';
 import { WorldNow } from './worldnow.js';
 import { currentPosition, locateAvailable, reverseGeocode, fallbackLabel } from './geo.js';
 import { Groq, MODELS } from './ai.js';
+import { fetchTerrainTiles, IMAGERY_CREDIT } from './scene/tiles.js';
+import { units, temp, tempWithScale, wind, precip, height,
+         tempToDisplay, tempFromDisplay, tempStep, tempScaleLabel } from './units.js';
 
 // ---------- DOM ----------
 const $ = id => document.getElementById(id);
@@ -32,6 +35,7 @@ const el = {
   btnSound: $('btn-sound'), btnAbout: $('btn-about'),
   btnLocate: $('btn-locate'), btnAi: $('btn-ai'),
   dispatch: $('dispatch'), dispatchBody: $('dispatch-body'),
+  btnUnits: $('btn-units'), btnTerrain: $('btn-terrain'), attribution: $('attribution'),
 };
 
 // ---------- state ----------
@@ -45,6 +49,8 @@ const state = {
   loading: false,
   openPanel: null,
   elevGrid: null,
+  terrainMode: localStorage.getItem('meteora.terrain') === 'stylized' ? 'stylized' : 'satellite',
+  tileFailed: false,  // set when the tile services can't be reached
 };
 
 const STARTERS = [
@@ -71,11 +77,12 @@ const logbook = new Logbook((ach) => {
 });
 
 const duel = new Duel((p) => {
+  const errFmt = e => (units.imperial ? e * 9 / 5 : e).toFixed(1);
   const msg = p.outcome === 'win'
-    ? `You beat the model at ${p.name} — you ${p.guess}°, model ${p.model}°, actual ${p.actual}°`
+    ? `You beat the model at ${p.name} — you ${temp(p.guess, { decimals: 1 })}, model ${temp(p.model, { decimals: 1 })}, actual ${temp(p.actual, { decimals: 1 })}`
     : p.outcome === 'loss'
-      ? `The model won at ${p.name} — actual ${p.actual}°, you were off by ${p.errUser.toFixed(1)}°`
-      : `Dead heat at ${p.name} — actual ${p.actual}°`;
+      ? `The model won at ${p.name} — actual ${temp(p.actual, { decimals: 1 })}, you were off by ${errFmt(p.errUser)}°`
+      : `Dead heat at ${p.name} — actual ${temp(p.actual, { decimals: 1 })}`;
   toast(`<span class="t-ico">🎯</span><span><b>Duel settled</b><span class="t-sub">${msg}</span></span>`, '', 8000);
   flashButton(el.btnDuel);
   checkAchievements(true);
@@ -194,7 +201,7 @@ function updateHUD(cond, tMs, force = false) {
   if (!force && hudTimer > 0) return;
   hudTimer = 0.25;
 
-  el.hudTemp.textContent = `${Math.round(cond.temp)}°`;
+  el.hudTemp.textContent = temp(cond.temp);
   el.hudCondText.textContent = describeCode(cond.code).label;
 
   const isExpedition = state.tl.mode === 'expedition';
@@ -204,12 +211,12 @@ function updateHUD(cond, tMs, force = false) {
   el.hud.classList.toggle('time-traveling', isExpedition || !isNow);
   el.btnNow.classList.toggle('live-on', isNow);
 
-  el.hudWind.textContent = `${Math.round(cond.windSpeed)} km/h ${windArrow(cond.windDir)}`;
+  el.hudWind.textContent = `${wind(cond.windSpeed)} ${windArrow(cond.windDir)}`;
   el.hudCloud.textContent = `${Math.round(cond.cloud)}%`;
   el.hudHumidity.textContent = `${Math.round(cond.humidity)}%`;
   if (cond.waveH !== null && cond.waveH !== undefined) {
     el.hudWaveStat.classList.remove('hidden');
-    el.hudWave.textContent = `${cond.waveH.toFixed(1)} m`;
+    el.hudWave.textContent = height(cond.waveH);
   } else {
     el.hudWaveStat.classList.add('hidden');
   }
@@ -323,8 +330,6 @@ async function loadLocation(place, expeditionDate = null) {
       place.autoName ? reverseGeocode(place.lat, place.lon).catch(() => null) : Promise.resolve(null),
     ]);
 
-    setLoader('raising the terrain…');
-
     // climate signals for the biome choice
     let tSum = 0, hSum = 0;
     for (const h of tl.hours) { tSum += h.temp; hSum += h.humidity; }
@@ -337,11 +342,37 @@ async function loadLocation(place, expeditionDate = null) {
     const biomeName = pickBiome(place.lat, meanElev, avgTemp, avgHumidity);
     const hasSeaHint = tl.hours.some(h => h.waveH !== null && h.waveH > 0.01);
 
-    const sameDiorama = state.place && state.elevGrid === elevGrid && world.diorama &&
-      world.diorama.biomeName === biomeName;
-    if (!sameDiorama) {
-      world.setDiorama({ elev: elevGrid, biomeName, hasSeaHint, lat: place.lat, lon: place.lon });
+    // Satellite mode pulls real terrain + imagery tiles; if they can't be reached we
+    // quietly fall back to the stylized diorama rather than showing nothing.
+    const terrainKey = `${place.lat.toFixed(4)},${place.lon.toFixed(4)},${state.terrainMode}`;
+    let built = world.diorama && state.terrainKey === terrainKey;
+    if (built && state.terrainMode === 'satellite' && !state.tileFailed) showAttribution(IMAGERY_CREDIT);
+
+    if (!built && state.terrainMode === 'satellite') {
+      setLoader('pulling satellite imagery…');
+      try {
+        const tileData = await fetchTerrainTiles(place.lat, place.lon);
+        world.setRealTerrain(tileData, { lat: place.lat, lon: place.lon });
+        built = true;
+        state.tileFailed = false;
+        showAttribution(IMAGERY_CREDIT);
+      } catch (err) {
+        console.warn('satellite terrain unavailable:', err.message);
+        state.tileFailed = true;
+        hideAttribution();
+      }
+    } else if (state.terrainMode !== 'satellite') {
+      hideAttribution();
     }
+
+    if (!built) {
+      setLoader('raising the terrain…');
+      world.setDiorama({ elev: elevGrid, biomeName, hasSeaHint, lat: place.lat, lon: place.lon });
+      if (state.terrainMode === 'satellite' && state.tileFailed) {
+        toast(`<span class="t-ico">🛰</span><span><b>Satellite imagery unreachable</b><span class="t-sub">Showing the stylized world instead — tap 🛰 to retry.</span></span>`, '', 6000);
+      }
+    }
+    state.terrainKey = state.tileFailed && state.terrainMode === 'satellite' ? null : terrainKey;
 
     // a GPS fix arrives nameless: use the real locality, never a guess from the timezone
     if (place.autoName) {
@@ -388,6 +419,53 @@ async function loadLocation(place, expeditionDate = null) {
     hideLoader();
   }
 }
+
+// ---------- units ----------
+function syncUnitsButton() {
+  el.btnUnits.textContent = units.imperial ? '°F' : '°C';
+  el.btnUnits.title = units.imperial
+    ? 'Imperial (°F, mph, in) — tap for metric'
+    : 'Metric (°C, km/h, mm) — tap for imperial';
+}
+
+el.btnUnits.addEventListener('click', () => {
+  units.toggle();
+  syncUnitsButton();
+  if (state.tl) updateHUD(condAt(state.timeIdx), timeMs(), true);
+  refreshOpenPanel(); // open panels are showing numbers too
+  toast(`<span class="t-ico">${units.imperial ? '🇺🇸' : '🌍'}</span><span><b>${units.imperial ? 'Imperial' : 'Metric'}</b><span class="t-sub">${units.imperial ? '°F · mph · inches · feet' : '°C · km/h · mm · metres'}</span></span>`, '', 3000);
+});
+syncUnitsButton();
+
+// ---------- terrain mode ----------
+function syncTerrainButton() {
+  const sat = state.terrainMode === 'satellite';
+  el.btnTerrain.textContent = sat ? '🛰' : '▲';
+  el.btnTerrain.title = sat
+    ? 'Satellite terrain — tap for the stylized world'
+    : 'Stylized world — tap for real satellite terrain';
+}
+
+function showAttribution(text) {
+  el.attribution.textContent = text;
+  el.attribution.classList.remove('hidden');
+}
+function hideAttribution() {
+  el.attribution.classList.add('hidden');
+}
+
+el.btnTerrain.addEventListener('click', async () => {
+  state.terrainMode = state.terrainMode === 'satellite' ? 'stylized' : 'satellite';
+  localStorage.setItem('meteora.terrain', state.terrainMode);
+  state.tileFailed = false;
+  state.terrainKey = null; // force a rebuild in the new mode
+  syncTerrainButton();
+  if (state.place) {
+    const expedition = state.tl && state.tl.mode === 'expedition' ? state.tl.expeditionDate : null;
+    await loadLocation(state.place, expedition);
+  }
+});
+syncTerrainButton();
 
 // ---------- AI field dispatch ----------
 let dispatchToken = 0;
@@ -593,13 +671,28 @@ function closePanel() {
 }
 el.panelClose.addEventListener('click', closePanel);
 
+const panelBuilders = {};
+
 function openPanel(kind, title, builder) {
   if (state.openPanel === kind) { closePanel(); return; }
   state.openPanel = kind;
+  panelBuilders[kind] = builder;
   el.panelTitle.textContent = title;
   el.panelBody.innerHTML = '<p>loading…</p>';
   el.panel.classList.remove('hidden');
   builder(el.panelBody);
+}
+
+// re-render whatever panel is open (after a unit switch, a new duel, etc.)
+function refreshOpenPanel() {
+  const kind = state.openPanel;
+  if (!kind || !panelBuilders[kind]) return;
+  panelBuilders[kind](el.panelBody);
+}
+
+function flyToPlace(place) {
+  closePanel();
+  loadLocation(place);
 }
 
 el.btnLogbook.addEventListener('click', () => {
@@ -620,7 +713,7 @@ el.btnWorldnow.addEventListener('click', () => {
   openPanel('worldnow', '🌐 World Right Now', async body => {
     try {
       await worldNow.refresh();
-      worldNow.render(body, place => { closePanel(); loadLocation(place); });
+      worldNow.render(body, flyToPlace);
     } catch (err) {
       body.innerHTML = `<p>Couldn't reach the live feed (${err.message}). Try again shortly.</p>`;
     }
@@ -719,14 +812,22 @@ el.btnAbout.addEventListener('click', () => {
       <h3>Forecast duel</h3>
       <p>Call tomorrow's high anywhere on Earth. The model locks its forecast at the same
       moment; the recorded actual settles it the next day.</p>
-      <h3>Your location & AI</h3>
-      <p>📍 drops you where you actually are. ✨ optionally connects a Groq key for
-      field dispatches and natural-language travel — everything else works without it.</p>
+      <h3>Two worlds</h3>
+      <p>🛰 switches between <b>satellite terrain</b> — real elevation from terrain tiles
+      wearing real aerial imagery, cut as a block of the actual ground — and the
+      <b>stylized world</b>, a procedural low-poly diorama built from the same elevation
+      data. Both are lit and weathered by identical live numbers.</p>
+      <h3>Units, location & AI</h3>
+      <p>°C/°F switches everything instantly. 📍 drops you where you actually are.
+      ✨ optionally connects a Groq key for field dispatches and natural-language travel —
+      everything else works without it.</p>
       <h3>Data & credits</h3>
       <p>Weather, marine, geocoding and elevation data by
       <a href="https://open-meteo.com/" target="_blank" rel="noopener">Open-Meteo.com</a>
       (<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>) —
       free, no API key, and it holds up under real traffic.
+      Satellite imagery © Esri, Maxar, Earthstar Geographics; terrain tiles from the
+      Mapzen/Tilezen open dataset.
       Rendering: <a href="https://threejs.org/" target="_blank" rel="noopener">three.js</a>.
       Sound is procedural WebAudio. No backend, no tracking; your logbook and duels live in your browser.</p>
       <h3>Tips</h3>
