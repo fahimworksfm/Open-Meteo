@@ -36,9 +36,12 @@ no build step. One static folder.
 - **🌐 World right now.** One batched call across ~36 places surfaces the live extremes —
   hottest, coldest, windiest, and every storm in progress — so hunting achievements is
   discovery, not tedium.
-- **📍 Your own location.** One tap drops you exactly where you are, named from the
-  timezone Open-Meteo reports back. Works in the browser and in the Android app (which
-  asks for the OS location permission the first time).
+- **📍 Your own location.** One tap drops you exactly where you are. Works in the browser
+  and in the Android app (which asks for the OS location permission the first time).
+  The weather always comes from your raw coordinates; the place *name* uses
+  [BigDataCloud](https://www.bigdatacloud.com/)'s free keyless reverse-geocode endpoint,
+  since Open-Meteo's geocoding is forward-only. If that lookup is unavailable the app
+  shows "Your location" with coordinates rather than guessing a city.
 - **Procedural sound.** Wind, rain and distance-delayed thunder are synthesized in
   WebAudio from the same data. 🔇/🔊 toggle in the top bar.
 - **✨ Optional AI (Groq).** Bring your own key and two things switch on: a two-sentence

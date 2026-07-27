@@ -35,11 +35,45 @@ export function currentPosition({ timeout = 15000 } = {}) {
   });
 }
 
-// "Europe/Lisbon" → "Lisbon area · Europe"; falls back to plain coordinates.
-export function labelFromTimezone(timezone, lat, lon) {
-  const coords = `${Math.abs(lat).toFixed(2)}°${lat >= 0 ? 'N' : 'S'} ${Math.abs(lon).toFixed(2)}°${lon >= 0 ? 'E' : 'W'}`;
-  if (!timezone || !timezone.includes('/')) return { name: 'Your location', country: coords };
-  const [region, city] = timezone.split('/');
-  const pretty = city.replace(/_/g, ' ');
-  return { name: `Near ${pretty}`, country: `${region.replace(/_/g, ' ')} · ${coords}` };
+export function formatCoords(lat, lon) {
+  return `${Math.abs(lat).toFixed(2)}°${lat >= 0 ? 'N' : 'S'} ${Math.abs(lon).toFixed(2)}°${lon >= 0 ? 'E' : 'W'}`;
+}
+
+// Names the actual settlement you are standing in. Open-Meteo's geocoding API is
+// forward-only (name → coordinates), so this uses BigDataCloud's free keyless
+// client endpoint. It is strictly cosmetic: the weather itself is always fetched
+// from the raw GPS coordinates, so a failure here costs a label and nothing else.
+const REVERSE_URL = 'https://api.bigdatacloud.net/data/reverse-geocode-client';
+
+export async function reverseGeocode(lat, lon, { timeout = 6000 } = {}) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeout);
+  try {
+    const res = await fetch(
+      `${REVERSE_URL}?latitude=${lat}&longitude=${lon}&localityLanguage=en`,
+      { signal: ctrl.signal },
+    );
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const d = await res.json();
+    const name = d.city || d.locality || d.principalSubdivision;
+    if (!name) throw new Error('no locality');
+    const region = [d.principalSubdivision, d.countryName]
+      .filter(Boolean)
+      .filter((v, i, arr) => arr.indexOf(v) === i && v !== name)
+      .join(', ');
+    return { name, country: region || formatCoords(lat, lon) };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Fallback when the reverse lookup is unavailable. Deliberately does NOT invent a
+// city from the timezone — a timezone spans a continent, so "America/New_York"
+// says nothing about whether you are in Manhattan or Charlotte.
+export function fallbackLabel(timezone, lat, lon) {
+  const coords = formatCoords(lat, lon);
+  return {
+    name: 'Your location',
+    country: timezone ? `${coords} · ${timezone.replace(/_/g, ' ')}` : coords,
+  };
 }

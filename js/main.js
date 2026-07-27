@@ -10,7 +10,7 @@ import { AudioEngine } from './audio.js';
 import { Logbook } from './logbook.js';
 import { Duel } from './duel.js';
 import { WorldNow } from './worldnow.js';
-import { currentPosition, locateAvailable, labelFromTimezone } from './geo.js';
+import { currentPosition, locateAvailable, reverseGeocode, fallbackLabel } from './geo.js';
 import { Groq, MODELS } from './ai.js';
 
 // ---------- DOM ----------
@@ -311,7 +311,7 @@ async function loadLocation(place, expeditionDate = null) {
       ? `opening the archive for ${expeditionDate}…`
       : `reading the sky over ${place.name}…`);
 
-    const [tl, elevGrid] = await Promise.all([
+    const [tl, elevGrid, revLabel] = await Promise.all([
       expeditionDate
         ? fetchTimelineArchive(place.lat, place.lon, expeditionDate)
         : fetchTimelineLive(place.lat, place.lon),
@@ -319,6 +319,8 @@ async function loadLocation(place, expeditionDate = null) {
         Math.abs(state.place.lat - place.lat) < 1e-6 && Math.abs(state.place.lon - place.lon) < 1e-6
         ? Promise.resolve(state.elevGrid)
         : fetchElevationGrid(place.lat, place.lon),
+      // only a GPS fix needs naming; searched places already know what they are
+      place.autoName ? reverseGeocode(place.lat, place.lon).catch(() => null) : Promise.resolve(null),
     ]);
 
     setLoader('raising the terrain…');
@@ -341,9 +343,9 @@ async function loadLocation(place, expeditionDate = null) {
       world.setDiorama({ elev: elevGrid, biomeName, hasSeaHint, lat: place.lat, lon: place.lon });
     }
 
-    // a GPS fix has no name until the API tells us its timezone
+    // a GPS fix arrives nameless: use the real locality, never a guess from the timezone
     if (place.autoName) {
-      const lbl = labelFromTimezone(tl.timezone, place.lat, place.lon);
+      const lbl = revLabel || fallbackLabel(tl.timezone, place.lat, place.lon);
       place = { ...place, name: lbl.name, country: lbl.country, autoName: false };
     }
 
