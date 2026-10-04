@@ -126,6 +126,15 @@ export class Sky {
     }
   }
 
+  // With post-processing on, sun and moon render past white so bloom gives them a halo.
+  setHDR(on) {
+    this.hdrBoost = on ? { sun: 1.9, moon: 1.35 } : null;
+    for (const m of [this.sunMat, this.moonMat]) {
+      m.toneMapped = !on;
+      m.needsUpdate = true;
+    }
+  }
+
   // env: { grade, sunDir, moonDir, moonPhase, windVec, windKmh, flash }
   update(dt, env) {
     const g = env.grade;
@@ -140,12 +149,15 @@ export class Sky {
 
     this.sun.position.copy(env.sunDir).multiplyScalar(CELESTIAL_DIST);
     this.sunMat.color.copy(g.sunColor);
+    if (this.hdrBoost) this.sunMat.color.multiplyScalar(this.hdrBoost.sun);
     this.sun.visible = env.sunDir.y > -0.06;
 
     this.moon.position.copy(env.moonDir).multiplyScalar(CELESTIAL_DIST);
     const moonBright = (1 - g.dayness) * (0.35 + 0.65 * Math.sin(env.moonPhase * Math.PI));
     this.moonMat.opacity += (moonBright - this.moonMat.opacity) * Math.min(1, dt * 2);
     this.moon.visible = env.moonDir.y > -0.04 && this.moonMat.opacity > 0.02;
+    this.moonMat.color.set(0xdde6f0);
+    if (this.hdrBoost) this.moonMat.color.multiplyScalar(this.hdrBoost.moon);
 
     // clouds: active count follows real cloud cover
     const cloudFrac = Math.min(1, (env.cond.cloud || 0) / 100);

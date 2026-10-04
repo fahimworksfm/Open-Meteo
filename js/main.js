@@ -36,6 +36,7 @@ const el = {
   btnLocate: $('btn-locate'), btnAi: $('btn-ai'),
   dispatch: $('dispatch'), dispatchBody: $('dispatch-body'),
   btnUnits: $('btn-units'), btnTerrain: $('btn-terrain'), attribution: $('attribution'),
+  btnQuality: $('btn-quality'),
 };
 
 // ---------- state ----------
@@ -90,7 +91,30 @@ const duel = new Duel((p) => {
 
 const worldNow = new WorldNow();
 const groq = new Groq();
-const world = new World($('scene'), { onStrike: d => audio.thunder(d) });
+// ---------- graphics quality ----------
+// A saved choice wins; otherwise phones start at medium, desktops at high,
+// and the world steps itself down if the device can't hold a smooth frame rate.
+const QUALITY_LABEL = { low: 'LO', medium: 'MD', high: 'HI' };
+const QUALITY_DESC = {
+  low: 'Plain render, lighter weather — easiest on battery',
+  medium: 'Bloom, weather color grading, denser rain and snow',
+  high: 'Full bloom, sharper image, heaviest rain and snow',
+};
+const savedQuality = localStorage.getItem('meteora.quality');
+const coarse = window.matchMedia && window.matchMedia('(pointer: coarse)').matches;
+const initialQuality = ['low', 'medium', 'high'].includes(savedQuality)
+  ? savedQuality
+  : (coarse || /Android|iPhone|iPad/i.test(navigator.userAgent) ? 'medium' : 'high');
+
+const world = new World($('scene'), {
+  onStrike: d => audio.thunder(d),
+  quality: initialQuality,
+  onQualityDrop: q => {
+    syncQualityButton();
+    toast(`<span class="t-ico">🎞</span><span><b>Graphics: ${q}</b><span class="t-sub">Lowered automatically to keep things smooth — tap ${QUALITY_LABEL[q]} to change.</span></span>`, '', 5000);
+  },
+});
+world.autoQuality = !savedQuality;
 
 // ---------- helpers ----------
 function toast(html, cls = '', ttl = 5000) {
@@ -301,6 +325,7 @@ world.onFrame = (dt) => {
     windVec: _windVec,
     windKmh: cond.windSpeed,
     flash: 0,
+    era: state.tl.mode === 'expedition' ? localDate(tMs).getUTCFullYear() : null,
   });
 
   audio.setWeather({ windKmh: cond.windSpeed, rain: g.info.rain || 0, snow: g.info.snow || 0 });
@@ -436,6 +461,30 @@ el.btnUnits.addEventListener('click', () => {
   toast(`<span class="t-ico">${units.imperial ? '🇺🇸' : '🌍'}</span><span><b>${units.imperial ? 'Imperial' : 'Metric'}</b><span class="t-sub">${units.imperial ? '°F · mph · inches · feet' : '°C · km/h · mm · metres'}</span></span>`, '', 3000);
 });
 syncUnitsButton();
+
+// ---------- graphics quality button ----------
+function syncQualityButton() {
+  const q = world.quality;
+  el.btnQuality.textContent = QUALITY_LABEL[q];
+  el.btnQuality.title = world.postSupported
+    ? `Graphics: ${q} — ${QUALITY_DESC[q]}. Tap to change.`
+    : 'Graphics: low — this device can\'t run the bloom / color-grade pass';
+}
+
+el.btnQuality.addEventListener('click', () => {
+  if (!world.postSupported) {
+    toast(`<span class="t-ico">🎞</span><span><b>Graphics: low</b><span class="t-sub">This device's WebGL can't run the bloom / color-grade pass.</span></span>`, '', 4000);
+    return;
+  }
+  const order = ['low', 'medium', 'high'];
+  const next = order[(order.indexOf(world.quality) + 1) % order.length];
+  world.setQuality(next);
+  world.autoQuality = false;
+  localStorage.setItem('meteora.quality', next);
+  syncQualityButton();
+  toast(`<span class="t-ico">🎞</span><span><b>Graphics: ${next}</b><span class="t-sub">${QUALITY_DESC[next]}</span></span>`, '', 3000);
+});
+syncQualityButton();
 
 // ---------- terrain mode ----------
 function syncTerrainButton() {

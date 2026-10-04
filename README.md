@@ -47,6 +47,14 @@ no build step. One static folder.
   [BigDataCloud](https://www.bigdatacloud.com/)'s free keyless reverse-geocode endpoint,
   since Open-Meteo's geocoding is forward-only. If that lookup is unavailable the app
   shows "Your location" with coordinates rather than guessing a city.
+- **🎞 Graphics quality (LO / MD / HI).** Medium and high add a post-processing pass:
+  bloom on the sun, moon and lightning, and a color grade read from the same live data:
+  white balance from the real sun color (strongest at golden hour), muted color under
+  storms, fog and snow, a cool cast at night, and an old-film look on time-machine
+  expeditions that strengthens the further back you go. Higher settings also let
+  heavier rain and snow drop *more* particles, not just brighter ones. Phones start
+  on medium; if a device can't hold a smooth frame rate the app steps down on its own
+  until you pick a setting yourself. Low skips post-processing entirely.
 - **Procedural sound.** Wind, rain and distance-delayed thunder are synthesized in
   WebAudio from the same data. 🔇/🔊 toggle in the top bar.
 - **✨ Optional AI (Groq).** Bring your own key and two things switch on: a two-sentence

@@ -7,15 +7,33 @@ import * as THREE from 'three';
 const AREA = 130;   // horizontal extent of the precipitation box
 const HEIGHT = 55;  // vertical extent
 
+// Particle budgets per graphics quality: the count at full intensity.
+// Real precipitation intensity picks how much of the budget actually falls.
+export const PRECIP_BUDGET = {
+  low:    { rain: 1500, snow: 1800 },
+  medium: { rain: 4500, snow: 3000 },
+  high:   { rain: 9000, snow: 4800 },
+};
+const MAX_RAIN = PRECIP_BUDGET.high.rain;
+const MAX_SNOW = PRECIP_BUDGET.high.snow;
+
 export class Precipitation {
-  constructor(scene) {
+  constructor(scene, quality = 'high') {
     this.scene = scene;
     this._buildRain();
     this._buildSnow();
+    this.setQuality(quality);
+  }
+
+  setQuality(q) {
+    this.budget = PRECIP_BUDGET[q] || PRECIP_BUDGET.medium;
+    // more particles each draw fainter, so a big budget reads as density, not a grey veil
+    this.rainUniforms.uDrop.value = Math.pow(PRECIP_BUDGET.low.rain / this.budget.rain, 0.4);
+    this.snowUniforms.uDrop.value = Math.pow(PRECIP_BUDGET.low.snow / this.budget.snow, 0.3);
   }
 
   _buildRain() {
-    const drops = 1500;
+    const drops = MAX_RAIN;
     const seeds = new Float32Array(drops * 2 * 3);
     const tips = new Float32Array(drops * 2);
     for (let i = 0; i < drops; i++) {
@@ -36,6 +54,7 @@ export class Precipitation {
       uTime: { value: 0 },
       uIntensity: { value: 0 },
       uWind: { value: new THREE.Vector3() },
+      uDrop: { value: 1 },
     };
     const mat = new THREE.ShaderMaterial({
       uniforms: this.rainUniforms,
@@ -63,9 +82,11 @@ export class Precipitation {
       `,
       fragmentShader: /* glsl */`
         uniform float uIntensity;
+        uniform float uDrop;
         varying float vAlpha;
         void main() {
-          gl_FragColor = vec4(0.72, 0.8, 0.92, vAlpha * uIntensity);
+          float a = min(1.0, uIntensity * 2.0) * (0.55 + 0.45 * uIntensity);
+          gl_FragColor = vec4(0.72, 0.8, 0.92, vAlpha * a * uDrop);
         }
       `,
     });
@@ -76,7 +97,7 @@ export class Precipitation {
   }
 
   _buildSnow() {
-    const flakes = 1800;
+    const flakes = MAX_SNOW;
     const seeds = new Float32Array(flakes * 3);
     for (let i = 0; i < flakes * 3; i++) seeds[i] = Math.random();
     const geo = new THREE.BufferGeometry();
@@ -87,6 +108,7 @@ export class Precipitation {
       uTime: { value: 0 },
       uIntensity: { value: 0 },
       uWind: { value: new THREE.Vector3() },
+      uDrop: { value: 1 },
     };
     const mat = new THREE.ShaderMaterial({
       uniforms: this.snowUniforms,
@@ -114,11 +136,13 @@ export class Precipitation {
       `,
       fragmentShader: /* glsl */`
         uniform float uIntensity;
+        uniform float uDrop;
         varying float vAlpha;
         void main() {
           float d = length(gl_PointCoord - 0.5);
           float disc = smoothstep(0.5, 0.18, d);
-          gl_FragColor = vec4(0.96, 0.98, 1.0, disc * vAlpha * uIntensity);
+          float a = min(1.0, uIntensity * 2.0) * (0.6 + 0.4 * uIntensity);
+          gl_FragColor = vec4(0.96, 0.98, 1.0, disc * vAlpha * a * uDrop);
         }
       `,
     });
@@ -139,6 +163,9 @@ export class Precipitation {
     ru.uIntensity.value += (rainTarget - ru.uIntensity.value) * Math.min(1, dt * 1.5);
     ru.uWind.value.copy(wind);
     this.rain.visible = ru.uIntensity.value > 0.02;
+    // heavier rain = more drops, not just brighter ones
+    const rainDrops = Math.round(this.budget.rain * (0.3 + 0.7 * Math.min(1, ru.uIntensity.value)));
+    this.rain.geometry.setDrawRange(0, rainDrops * 2);
 
     const snowTarget = info.snow || 0;
     const su = this.snowUniforms;
@@ -146,6 +173,8 @@ export class Precipitation {
     su.uIntensity.value += (snowTarget - su.uIntensity.value) * Math.min(1, dt * 1.5);
     su.uWind.value.copy(wind.multiplyScalar(0.4));
     this.snow.visible = su.uIntensity.value > 0.02;
+    const flakes = Math.round(this.budget.snow * (0.3 + 0.7 * Math.min(1, su.uIntensity.value)));
+    this.snow.geometry.setDrawRange(0, flakes);
   }
 
   dispose() {
@@ -177,6 +206,14 @@ export class Lightning {
     this.bolt.visible = false;
     this.scene.add(this.bolt);
     this.boltTtl = 0;
+  }
+
+  // With post-processing the bolt is drawn brighter than white so bloom wraps it in glow.
+  setHDR(on) {
+    const m = this.bolt.material;
+    m.toneMapped = !on;
+    m.color.set(0xeef4ff).multiplyScalar(on ? 8 : 1);
+    m.needsUpdate = true;
   }
 
   setActive(active) {

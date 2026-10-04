@@ -650,6 +650,14 @@ html, body {
 @media (max-width: 720px) {
   #topbar { flex-wrap: wrap; }
   .search-wrap { order: 3; flex: 1 1 100%; }
+  /* more buttons than a phone is wide: let the row scroll instead of clipping */
+  .topnav {
+    flex: 1 1 0; min-width: 0;
+    overflow-x: auto; scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .topnav::-webkit-scrollbar { display: none; }
+  .topnav .icon-btn { flex: 0 0 auto; }
   .hud { top: 118px; padding: 12px 16px; }
   .hud-temp { font-size: 40px; }
   .timebar { bottom: 10px; padding: 10px 12px; }

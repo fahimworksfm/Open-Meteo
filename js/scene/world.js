@@ -8,12 +8,18 @@ import { Sky } from './sky.js';
 import { Diorama } from './terrain.js';
 import { RealTerrain } from './realterrain.js';
 import { Precipitation, Lightning } from './effects.js';
+import { PostFX, postSupported } from './post.js';
+
+export const QUALITIES = ['low', 'medium', 'high'];
+const PIXEL_RATIO_CAP = { low: 1.25, medium: 1.5, high: 2 };
 
 export class World {
-  constructor(canvas, { onStrike } = {}) {
+  // quality: 'low' (direct render) | 'medium' | 'high' (bloom + grade, denser weather)
+  constructor(canvas, { onStrike, quality = 'high', onQualityDrop } = {}) {
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
     this.renderer.setSize(window.innerWidth, window.innerHeight);
+    this.postSupported = postSupported(this.renderer);
+    this.onQualityDrop = onQualityDrop; // (newQuality) => void, after an automatic step down
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.06;
 
@@ -48,6 +54,12 @@ export class World {
     this.precip = new Precipitation(this.scene);
     this.lightning = new Lightning(this.scene, onStrike);
 
+    this.post = null;
+    this.quality = null;
+    this.autoQuality = false; // when true, sustained low fps steps quality down
+    this._perf = { time: 0, frames: 0, slowWindows: 0, grace: 4 };
+    this.setQuality(quality);
+
     this.diorama = null;
     this.env = null;
     this._clock = new THREE.Clock();
@@ -62,6 +74,58 @@ export class World {
     this.camera.aspect = window.innerWidth / window.innerHeight;
     this.camera.updateProjectionMatrix();
     this.renderer.setSize(window.innerWidth, window.innerHeight);
+    if (this.post) this._sizePost();
+  }
+
+  _sizePost() {
+    const size = this.renderer.getDrawingBufferSize(new THREE.Vector2());
+    this.post.setSize(size.x, size.y);
+  }
+
+  setQuality(q) {
+    if (!QUALITIES.includes(q)) q = 'medium';
+    if (q !== 'low' && !this.postSupported) q = 'low';
+    if (q === this.quality) return q;
+    this.quality = q;
+
+    this.renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, PIXEL_RATIO_CAP[q]));
+    this.renderer.setSize(window.innerWidth, window.innerHeight);
+
+    const usePost = q !== 'low';
+    if (usePost) {
+      if (!this.post) this.post = new PostFX(this.renderer, q);
+      else this.post.setQuality(q);
+      this._sizePost();
+    } else if (this.post) {
+      this.post.dispose();
+      this.post = null;
+    }
+    this.sky.setHDR(usePost);
+    this.lightning.setHDR(usePost);
+    this.precip.setQuality(q);
+    this._perf.slowWindows = 0;
+    this._perf.grace = 3; // let the new settings settle before judging them
+    return q;
+  }
+
+  // Watches real frame time; on a device that can't keep up, steps quality down once
+  // per sustained slump. Only active while the user hasn't picked a quality themselves.
+  _watchPerf(rawDt) {
+    const p = this._perf;
+    if (!this.autoQuality || document.hidden || this.quality === 'low' || rawDt > 0.5) return;
+    p.time += rawDt;
+    p.frames++;
+    if (p.time < 2) return;
+    const fps = p.frames / p.time;
+    p.time = 0;
+    p.frames = 0;
+    if (p.grace > 0) { p.grace--; return; }
+    p.slowWindows = fps < 30 ? p.slowWindows + 1 : 0;
+    if (p.slowWindows >= 2) {
+      const next = QUALITIES[QUALITIES.indexOf(this.quality) - 1];
+      this.setQuality(next);
+      if (this.onQualityDrop) this.onQualityDrop(next);
+    }
   }
 
   setDiorama(params) {
@@ -98,14 +162,16 @@ export class World {
     this.controls.autoRotate = true;
   }
 
-  // env: { cond, grade, sunDir, moonDir, moonPhase, windVec, windKmh }
+  // env: { cond, grade, sunDir, moonDir, moonPhase, windVec, windKmh, era }
   setEnvironment(env) {
     this.env = env;
   }
 
   _loop() {
     requestAnimationFrame(this._loop);
-    const dt = Math.min(this._clock.getDelta(), 0.1);
+    const rawDt = this._clock.getDelta();
+    const dt = Math.min(rawDt, 0.1);
+    this._watchPerf(rawDt);
 
     if (this.onFrame) this.onFrame(dt);
 
@@ -131,6 +197,7 @@ export class World {
     }
 
     this.controls.update();
-    this.renderer.render(this.scene, this.camera);
+    if (this.post) this.post.render(this.scene, this.camera, env, dt);
+    else this.renderer.render(this.scene, this.camera);
   }
 }
