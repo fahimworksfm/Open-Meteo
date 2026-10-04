@@ -49,7 +49,8 @@ no build step. One static folder.
   shows "Your location" with coordinates rather than guessing a city.
 - **🎞 Graphics quality (LO / MD / HI).** Medium and high add a post-processing pass:
   bloom on the sun, moon and lightning, and a color grade read from the same live data:
-  white balance from the real sun color (strongest at golden hour), muted color under
+  white balance from the real sun color, and at golden hour a warm horizon haze plus light
+  shafts from wherever the sun actually sits, muted color under
   storms, fog and snow, a cool cast at night, and an old-film look on time-machine
   expeditions that strengthens the further back you go. Higher settings also let
   heavier rain and snow drop *more* particles, not just brighter ones. Phones start

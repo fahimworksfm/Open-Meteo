@@ -82,6 +82,16 @@ const COMPOSITE_FRAG = /* glsl */`
   uniform float uSepia;
   uniform float uGrain;
   uniform float uTime;
+  // the real sun, for golden-hour haze and light shafts
+  uniform vec3 uSunDir;
+  uniform vec3 uSunTint;
+  uniform float uHaze;
+  uniform vec2 uSunUv;
+  uniform float uShaft;
+  uniform vec3 uCamFwd;
+  uniform vec3 uCamRight;
+  uniform vec3 uCamUp;
+  uniform vec2 uTanFov; // tan(half fov) * (aspect, 1)
   varying vec2 vUv;
 
   float hash(vec2 p) {
@@ -93,6 +103,38 @@ const COMPOSITE_FRAG = /* glsl */`
   void main() {
     vec3 c = texture2D(tScene, vUv).rgb;
     c += texture2D(tBloom, vUv).rgb * uBloom;
+    float n = hash(gl_FragCoord.xy + fract(uTime) * 917.0);
+
+    // forward-scattered sunlight: the half of the view facing the low sun glows warm
+    if (uHaze > 0.001) {
+      vec2 ndc = vUv * 2.0 - 1.0;
+      vec3 ray = normalize(uCamFwd + uCamRight * ndc.x * uTanFov.x + uCamUp * ndc.y * uTanFov.y);
+      float mu = max(dot(ray, uSunDir), 0.0);
+      float scatter = pow(mu, 12.0) * 0.8 + pow(mu, 3.0) * 0.22;
+      // a band hugging the horizon, where low sunlight crosses the most air;
+      // the ground right under the camera stays clean
+      scatter *= exp(-abs(ray.y + 0.02) * 7.0);
+      c += uSunTint * scatter * uHaze;
+    }
+
+  #if SHAFT_STEPS > 0
+    // light shafts: march the bloom buffer toward the sun; terrain and trees cut the rays
+    if (uShaft > 0.001) {
+      vec2 delta = (vUv - uSunUv) * (0.9 / float(SHAFT_STEPS));
+      vec2 p = vUv - delta * n;
+      vec2 aspect = vec2(uTanFov.x / uTanFov.y, 1.0);
+      float decay = 1.0;
+      vec3 acc = vec3(0.0);
+      for (int i = 0; i < SHAFT_STEPS; i++) {
+        p -= delta;
+        // only light near the sun becomes a ray; lit ground elsewhere doesn't streak
+        float nearSun = exp(-length((p - uSunUv) * aspect) * 9.0);
+        acc += texture2D(tBloom, p).rgb * decay * nearSun;
+        decay *= 0.96;
+      }
+      c += min(acc * (uShaft / float(SHAFT_STEPS)), vec3(0.45)) * uSunTint;
+    }
+  #endif
 
     c *= uTint;
     float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
@@ -103,7 +145,6 @@ const COMPOSITE_FRAG = /* glsl */`
     // highlights roll off instead of clipping hard where bloom stacks up
     c = mix(c, 1.0 - exp(-c * 1.6) * 0.82, smoothstep(0.8, 1.6, max(c.r, max(c.g, c.b))));
 
-    float n = hash(gl_FragCoord.xy + fract(uTime) * 917.0);
     c += (n - 0.5) * uGrain;
     c += (n - 0.5) / 255.0; // dither: kills banding in long sky gradients
 
@@ -113,6 +154,7 @@ const COMPOSITE_FRAG = /* glsl */`
 
 const LEVELS = { high: 5, medium: 4 };
 const SAMPLES = { high: 4, medium: 2 };
+const SHAFT_STEPS = { high: 28, medium: 14 };
 
 function makeMat(frag, uniforms, extra = {}) {
   return new THREE.ShaderMaterial({
@@ -163,12 +205,26 @@ export class PostFX {
       uSepia: { value: 0 },
       uGrain: { value: 0 },
       uTime: { value: 0 },
+      uSunDir: { value: new THREE.Vector3(0, 1, 0) },
+      uSunTint: { value: new THREE.Vector3(1, 0.8, 0.55) },
+      uHaze: { value: 0 },
+      uSunUv: { value: new THREE.Vector2(0.5, 0.5) },
+      uShaft: { value: 0 },
+      uCamFwd: { value: new THREE.Vector3() },
+      uCamRight: { value: new THREE.Vector3() },
+      uCamUp: { value: new THREE.Vector3() },
+      uTanFov: { value: new THREE.Vector2(1, 1) },
     });
+    this.compositeMat.defines = { SHAFT_STEPS: SHAFT_STEPS[quality] || 0 };
 
     // smoothed grade, eased toward per-frame targets so scrubbing never pops
-    this.g = { bloom: 0.4, sat: 1, contrast: 1, sepia: 0, grain: 0, tint: new THREE.Vector3(1, 1, 1) };
+    this.g = {
+      bloom: 0.4, sat: 1, contrast: 1, sepia: 0, grain: 0, tint: new THREE.Vector3(1, 1, 1),
+      haze: 0, shaft: 0, threshold: 0.82,
+    };
     this._tint = new THREE.Vector3();
     this._sun = new THREE.Color();
+    this._v = new THREE.Vector3();
 
     this.sceneRT = null;
     this.bloomRTs = [];
@@ -209,6 +265,8 @@ export class PostFX {
   setQuality(q) {
     if (q === this.quality && this.sceneRT) return;
     this.quality = q;
+    this.compositeMat.defines.SHAFT_STEPS = SHAFT_STEPS[q] || 0;
+    this.compositeMat.needsUpdate = true;
     this._build();
   }
 
@@ -219,9 +277,11 @@ export class PostFX {
   }
 
   // env: the world env for this frame (grade, cond, sunDir, flash, era)
-  _updateGrade(dt, env) {
+  _updateGrade(dt, env, camera) {
     const g = this.g;
     let bloom = 0.42, sat = 1.04, contrast = 1.03, sepia = 0, grain = 0;
+    let haze = 0, shaft = 0, threshold = 0.82;
+    const cu = this.compositeMat.uniforms;
     const tint = this._tint.set(1, 1, 1);
 
     if (env) {
@@ -234,11 +294,16 @@ export class PostFX {
       const fogF = info.fog ? 1 : 0;
       const sunAlt = env.sunDir.y;
 
+      // golden hour: peaks as the real sun sits just above the horizon, fades into
+      // twilight below it and into plain daylight above ~20°; cloud cover dims it
+      const golden = THREE.MathUtils.smoothstep(sunAlt, -0.08, 0.02)
+        * (1 - THREE.MathUtils.smoothstep(sunAlt, 0.12, 0.38))
+        * (1 - cloudF * 0.75) * (1 - stormF * 0.8) * (1 - fogF * 0.6);
+
       // white balance follows the real sun colour, strongest at golden hour
-      const golden = day * (1 - THREE.MathUtils.smoothstep(sunAlt, 0.08, 0.35)) * (1 - cloudF * 0.7);
       const sun = this._sun.copy(gr.sunColor);
       const m = Math.max(sun.r, sun.g, sun.b, 1e-3);
-      const wb = 0.06 + golden * 0.12;
+      const wb = 0.06 + golden * 0.32;
       tint.set(
         1 + (sun.r / m - 1) * wb,
         1 + (sun.g / m - 1) * wb,
@@ -249,11 +314,28 @@ export class PostFX {
       tint.x *= 1 - night * 0.06 - snowF * 0.03;
       tint.z *= 1 + night * 0.07 + snowF * 0.04;
 
-      sat = 1.04 + golden * 0.12 - cloudF * 0.08 - stormF * 0.18 - snowF * 0.08 - fogF * 0.12 - night * 0.12;
+      sat = 1.04 + golden * 0.2 - cloudF * 0.08 - stormF * 0.18 - snowF * 0.08 - fogF * 0.12 - night * 0.12;
       contrast = 1.03 + stormF * 0.05 - fogF * 0.08 - snowF * 0.03;
 
       // bloom: lightning and the low sun earn the glow; flat overcast doesn't
-      bloom = 0.32 + golden * 0.25 + night * 0.15 - cloudF * 0.1 - snowF * 0.22 + (env.flash || 0) * 1.4;
+      bloom = 0.32 + golden * 0.42 + night * 0.15 - cloudF * 0.1 - snowF * 0.22 + (env.flash || 0) * 1.4;
+      threshold = 0.82 - golden * 0.1; // sunlit rims and the bright sky near the sun join in
+
+      // the sun's hue (normalised), pushed a little warmer for the glow terms
+      cu.uSunTint.value.set(sun.r / m, (sun.g / m) * 0.92, (sun.b / m) * 0.78);
+      cu.uSunDir.value.copy(env.sunDir).normalize();
+      haze = golden * 0.45;
+
+      // shafts only when the camera looks toward the sun and it sits near the frame
+      const fwd = camera.getWorldDirection(this._v);
+      const facing = THREE.MathUtils.smoothstep(fwd.dot(env.sunDir), 0.1, 0.6);
+      if (facing > 0 && sunAlt > -0.03) {
+        const p = this._v.copy(env.sunDir).multiplyScalar(1000).add(camera.position).project(camera);
+        cu.uSunUv.value.set(p.x * 0.5 + 0.5, p.y * 0.5 + 0.5);
+        const offscreen = Math.hypot(p.x, p.y);
+        shaft = facing * (1 - THREE.MathUtils.smoothstep(offscreen, 1.2, 2.2))
+          * (golden * 1.3 + day * 0.3 * (1 - cloudF));
+      }
 
       // expeditions into the archive read as old film, more so the further back
       if (env.era) {
@@ -271,8 +353,22 @@ export class PostFX {
     g.sepia += (sepia - g.sepia) * k;
     g.grain += (grain - g.grain) * k;
     g.tint.lerp(tint, k);
+    g.haze += (haze - g.haze) * k;
+    g.shaft += (shaft - g.shaft) * Math.min(1, dt * 6);
+    g.threshold += (threshold - g.threshold) * k;
 
-    const u = this.compositeMat.uniforms;
+    const u = cu;
+    u.uHaze.value = g.haze;
+    u.uShaft.value = g.shaft;
+    this.brightMat.uniforms.uThreshold.value = g.threshold;
+
+    // camera basis so the composite can rebuild each pixel's view ray
+    const e = camera.matrixWorld.elements;
+    u.uCamRight.value.set(e[0], e[1], e[2]).normalize();
+    u.uCamUp.value.set(e[4], e[5], e[6]).normalize();
+    u.uCamFwd.value.set(-e[8], -e[9], -e[10]).normalize();
+    const tanY = Math.tan(THREE.MathUtils.degToRad(camera.fov) / 2);
+    u.uTanFov.value.set(tanY * camera.aspect, tanY);
     u.uBloom.value = Math.max(0, g.bloom);
     u.uSaturation.value = g.sat;
     u.uContrast.value = g.contrast;
@@ -292,6 +388,7 @@ export class PostFX {
     r.render(scene, camera);
 
     r.autoClear = false;
+    this._updateGrade(dt, env, camera);
 
     // bright pass → mip chain down → additive tent back up
     const rts = this.bloomRTs;
@@ -310,7 +407,6 @@ export class PostFX {
       this._pass(this.upMat, rts[i - 1]);
     }
 
-    this._updateGrade(dt, env);
     const cu = this.compositeMat.uniforms;
     cu.tScene.value = this.sceneRT.texture;
     cu.tBloom.value = rts[0].texture;
