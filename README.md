@@ -36,6 +36,11 @@ no build step. One static folder.
   thunderstorm, find −30 °C, catch 5 m seas, see the midnight sun. Sightings reached
   through the time machine are honestly badged "via time machine".
   Illustrated badges (in `assets/badges/`) are replacing the emoji one by one.
+- **🛸 Fly-in intro.** On the first visit, scrolling flies you from orbit down into a
+  cyclone and through the cloud deck, then fades into the live world, which has been
+  loading underneath the whole time. It's a pre-rendered clip (an image sequence in
+  `assets/intro/`), so it sets the scene and doesn't show the weather; replay it from ✦ About,
+  or add `?nointro` to the URL to skip it.
 - **🌌 Night sky.** On clear nights the Milky Way rises over the horizon behind the
   stars, fading in with the real sun altitude and cloud cover and turning with the
   sidereal day.

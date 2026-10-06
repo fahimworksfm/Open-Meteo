@@ -667,3 +667,93 @@ html, body {
   .panel { top: 122px; bottom: 84px; }
   .brand { letter-spacing: 0.2em; }
 }
+
+/* ---------- first-visit intro (js/intro.js) ---------- */
+
+#intro {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  background: #000;
+  outline: none;
+  transition: opacity 1.2s ease;
+}
+#intro::-webkit-scrollbar { display: none; }
+#intro.leaving { opacity: 0; pointer-events: none; }
+.intro-spacer { height: 560vh; }
+.intro-canvas {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+  /* fixed children scroll-chain to the page, not to #intro: let wheel/touch reach the scroller */
+  pointer-events: none;
+}
+.intro-captions {
+  position: fixed;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  padding: 0 24px;
+}
+.intro-cap {
+  grid-area: 1 / 1;
+  text-align: center;
+  opacity: 0;
+  text-shadow: 0 2px 24px rgba(0, 0, 0, 0.7), 0 1px 3px rgba(0, 0, 0, 0.6);
+  will-change: opacity, transform;
+}
+.intro-title {
+  font-size: clamp(34px, 7vw, 72px);
+  font-weight: 800;
+  letter-spacing: 0.32em;
+  margin-right: -0.32em; /* re-centre the tracked word */
+}
+.intro-sub {
+  margin-top: 10px;
+  font-size: clamp(16px, 2.4vw, 22px);
+  font-weight: 600;
+  max-width: 34ch;
+  margin-inline: auto;
+  line-height: 1.4;
+}
+.intro-hint {
+  position: fixed;
+  left: 50%;
+  bottom: calc(28px + env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  letter-spacing: 0.3em;
+  text-transform: uppercase;
+  color: var(--ink-dim);
+  pointer-events: none;
+}
+.intro-hint i {
+  width: 12px; height: 12px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(45deg);
+  animation: intro-bob 1.6s ease-in-out infinite;
+}
+@keyframes intro-bob {
+  0%, 100% { transform: translateY(0) rotate(45deg); opacity: 0.5; }
+  50% { transform: translateY(6px) rotate(45deg); opacity: 1; }
+}
+.intro-skip {
+  position: fixed;
+  top: calc(16px + env(safe-area-inset-top, 0px));
+  right: calc(16px + env(safe-area-inset-right, 0px));
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+.about-replay { margin-top: 6px; }

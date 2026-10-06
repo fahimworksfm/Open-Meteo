@@ -8,6 +8,7 @@ import { grade, describeCode, pickBiome } from './palette.js';
 import { World } from './scene/world.js';
 import { AudioEngine } from './audio.js';
 import { Logbook, badgeHTML } from './logbook.js';
+import { shouldPlayIntro, playIntro } from './intro.js';
 import { Duel } from './duel.js';
 import { WorldNow } from './worldnow.js';
 import { currentPosition, locateAvailable, reverseGeocode, fallbackLabel } from './geo.js';
@@ -881,9 +882,15 @@ el.btnAbout.addEventListener('click', () => {
       Mapzen/Tilezen open dataset.
       Rendering: <a href="https://threejs.org/" target="_blank" rel="noopener">three.js</a>.
       Sound is procedural WebAudio. No backend, no tracking; your logbook and duels live in your browser.</p>
+      <h3>Intro</h3>
+      <p><button class="chip-btn about-replay" id="btn-replay-intro">Replay the fly-in</button></p>
       <h3>Tips</h3>
       <p>Drag to orbit · scroll to zoom · press ▶ to let time flow · try a thunderstorm from
       the 🌐 panel · sunrise at 68°N in June is worth the trip.</p>`;
+    body.querySelector('#btn-replay-intro').addEventListener('click', () => {
+      closePanel();
+      playIntro(introHooks);
+    });
   });
 });
 
@@ -896,8 +903,17 @@ el.btnSound.addEventListener('click', () => { audio.toggle(); syncSoundIcon(); }
 document.addEventListener('pointerdown', () => audio.unlock(), { once: true });
 syncSoundIcon();
 
+// ---------- intro ----------
+// The world stops drawing while the fly-in covers it, and resumes as it fades out.
+const introHooks = {
+  onCover: () => { world.paused = true; },
+  onReveal: () => { world.paused = false; },
+};
+
 // ---------- boot ----------
 (async function boot() {
+  // the fly-in plays over the loader while the first place loads underneath
+  if (shouldPlayIntro()) playIntro(introHooks);
   showLoader('waking up the atmosphere…');
 
   const params = new URLSearchParams(location.search);

@@ -60,6 +60,7 @@ export class World {
     this._perf = { time: 0, frames: 0, slowWindows: 0, grace: 4 };
     this.setQuality(quality);
 
+    this.paused = false; // true while something opaque (the intro) covers the canvas
     this.diorama = null;
     this.env = null;
     this._clock = new THREE.Clock();
@@ -171,6 +172,7 @@ export class World {
     requestAnimationFrame(this._loop);
     const rawDt = this._clock.getDelta();
     const dt = Math.min(rawDt, 0.1);
+    if (this.paused) return; // nothing visible to draw; spare the GPU and battery
     this._watchPerf(rawDt);
 
     if (this.onFrame) this.onFrame(dt);
