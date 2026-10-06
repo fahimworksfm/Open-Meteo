@@ -7,7 +7,7 @@ import { sunPosition, moonPosition } from './solar.js';
 import { grade, describeCode, pickBiome } from './palette.js';
 import { World } from './scene/world.js';
 import { AudioEngine } from './audio.js';
-import { Logbook } from './logbook.js';
+import { Logbook, badgeHTML } from './logbook.js';
 import { Duel } from './duel.js';
 import { WorldNow } from './worldnow.js';
 import { currentPosition, locateAvailable, reverseGeocode, fallbackLabel } from './geo.js';
@@ -73,7 +73,7 @@ const STARTERS = [
 const audio = new AudioEngine();
 
 const logbook = new Logbook((ach) => {
-  toast(`<span class="t-ico">${ach.ico}</span><span><b>${ach.name}</b><span class="t-sub">${ach.desc}</span></span>`, 'achievement', 6000);
+  toast(`<span class="t-ico">${badgeHTML(ach)}</span><span><b>${ach.name}</b><span class="t-sub">${ach.desc}</span></span>`, 'achievement', 6000);
   flashButton(el.btnLogbook);
 });
 
@@ -326,6 +326,8 @@ world.onFrame = (dt) => {
     windKmh: cond.windSpeed,
     flash: 0,
     era: state.tl.mode === 'expedition' ? localDate(tMs).getUTCFullYear() : null,
+    timeMs: tMs,
+    lon: state.place.lon,
   });
 
   audio.setWeather({ windKmh: cond.windSpeed, rain: g.info.rain || 0, snow: g.info.snow || 0 });

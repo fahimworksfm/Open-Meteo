@@ -21,7 +21,7 @@ import androidx.webkit.WebViewAssetLoader;
 
 /**
  * Thin shell around the Meteora web app. The app itself lives at the repo root
- * (index.html + js/ + css/ + vendor/) and is copied into assets at build time;
+ * (index.html + js/ + css/ + vendor/ + assets/) and is copied into assets at build time;
  * WebViewAssetLoader serves it over https://appassets.androidx.dev/ so ES modules,
  * fetch() to Open-Meteo, and localStorage all behave exactly as in a browser.
  */

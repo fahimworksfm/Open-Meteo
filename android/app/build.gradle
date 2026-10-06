@@ -9,7 +9,7 @@ def webAssetsDir = layout.buildDirectory.dir('generated/webAssets')
 
 tasks.register('copyWebAssets', Copy) {
     from(webSrcDir) {
-        include 'index.html', 'css/**', 'js/**', 'vendor/**'
+        include 'index.html', 'css/**', 'js/**', 'vendor/**', 'assets/**'
     }
     into webAssetsDir
 }

@@ -3,6 +3,15 @@
 // badged as time travel. Everything persists in localStorage.
 
 const KEY = 'meteora.logbook.v1';
+
+// Illustrated badges that exist so far; every other achievement keeps its emoji.
+const BADGE_ART = new Set(['storm-witness', 'deep-freeze', 'furnace', 'gale-rider', 'big-swell']);
+
+export function badgeHTML(a) {
+  return BADGE_ART.has(a.id)
+    ? `<img class="badge-img" src="assets/badges/${a.id}.webp" alt="" draggable="false">`
+    : a.ico;
+}
 const VISITED_KEY = 'meteora.visited.v1';
 
 // ctx: { cond, live, sunAltDeg, place, timeMs, year, visitedCount, hasSea, duelRecord }
@@ -130,7 +139,7 @@ export class Logbook {
         earnedLine = `<div class="lb-earned">✓ ${e.when || ''}${at}${badge}</div>`;
       }
       el.innerHTML = `
-        <div class="lb-ico">${a.ico}</div>
+        <div class="lb-ico">${badgeHTML(a)}</div>
         <div>
           <div class="lb-name">${a.name}</div>
           <div class="lb-desc">${a.desc}</div>

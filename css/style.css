@@ -493,6 +493,8 @@ html, body {
 }
 .lb-entry.locked { opacity: 0.45; filter: saturate(0.2); }
 .lb-ico { font-size: 22px; width: 30px; text-align: center; flex-shrink: 0; }
+.lb-ico .badge-img { width: 44px; height: 44px; margin: -7px; display: block; }
+.badge-img { object-fit: contain; user-select: none; }
 .lb-name { font-weight: 700; font-size: 13.5px; }
 .lb-desc { font-size: 12px; color: var(--ink-dim); }
 .lb-earned { font-size: 11px; color: var(--accent); margin-top: 2px; }
@@ -596,6 +598,7 @@ html, body {
   animation-delay: 0s, var(--ttl, 5s);
 }
 .toast .t-ico { font-size: 20px; }
+.toast .t-ico .badge-img { width: 40px; height: 40px; display: block; margin: -8px -4px; }
 .toast .t-sub { display: block; font-size: 11.5px; font-weight: 500; color: var(--ink-dim); }
 .toast.achievement { border-color: var(--accent-warm); box-shadow: 0 12px 40px rgba(0,0,0,0.5), 0 0 28px rgba(255,196,107,0.3); }
 @keyframes toast-in {

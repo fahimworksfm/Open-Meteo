@@ -78,6 +78,53 @@ export class Sky {
     this.stars.renderOrder = -9;
     this.group.add(this.stars);
 
+    // ---- Milky Way: painted panorama behind the point stars ----
+    // The tile is seamless left-to-right and wraps three times around the horizon; the
+    // band is pulled down to ~15° up, where the orbit camera can actually see it, and
+    // that squeeze keeps the texels roughly square. It fades in exactly like the stars do (real sun
+    // altitude and real cloud cover) and turns with the sidereal day.
+    const skyTex = new THREE.TextureLoader().load('assets/night-sky.webp');
+    skyTex.wrapS = THREE.RepeatWrapping;
+    skyTex.generateMipmaps = false;           // always magnified; avoids a mip seam at the wrap
+    skyTex.minFilter = THREE.LinearFilter;
+    this.milkyUniforms = { tSky: { value: skyTex }, uAlpha: { value: 0 }, uRot: { value: 0 } };
+    this.milky = new THREE.Mesh(
+      new THREE.SphereGeometry(DOME_RADIUS * 0.97, 48, 24),
+      new THREE.ShaderMaterial({
+        uniforms: this.milkyUniforms,
+        side: THREE.BackSide,
+        transparent: true,
+        blending: THREE.AdditiveBlending,
+        depthWrite: false,
+        fog: false,
+        vertexShader: /* glsl */`
+          varying vec3 vDir;
+          void main() {
+            vDir = position;
+            gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+          }
+        `,
+        fragmentShader: /* glsl */`
+          uniform sampler2D tSky;
+          uniform float uAlpha;
+          uniform float uRot;
+          varying vec3 vDir;
+          void main() {
+            vec3 d = normalize(vDir);
+            float u = (atan(d.x, -d.z) + uRot) / 6.2831853 * 3.0;
+            float v = pow(asin(clamp(d.y, 0.0, 1.0)) / 1.5707963, 0.38);
+            vec3 c = texture2D(tSky, vec2(u, v)).rgb;
+            c = max(c - 0.035, 0.0);             // keep the empty sky between stars black
+            float horizon = smoothstep(0.0, 0.12, d.y);
+            gl_FragColor = vec4(c * uAlpha * horizon, 1.0);
+          }
+        `,
+      }),
+    );
+    this.milky.renderOrder = -9.5;
+    this.milky.visible = false;
+    this.group.add(this.milky);
+
     // ---- sun & moon ----
     this.sunMat = new THREE.MeshBasicMaterial({ color: 0xffffff, fog: false });
     this.sun = new THREE.Mesh(new THREE.SphereGeometry(16, 16, 12), this.sunMat);
@@ -146,6 +193,14 @@ export class Sky {
     this.domeUniforms.uFlash.value = env.flash;
 
     this.starMat.opacity += (g.starAlpha - this.starMat.opacity) * Math.min(1, dt * 2);
+    this.milkyUniforms.uAlpha.value = this.starMat.opacity * 0.85;
+    this.milky.visible = this.starMat.opacity > 0.01;
+    if (env.timeMs !== undefined) {
+      // local sidereal angle: the whole star field turns once per sidereal day
+      const rot = (env.timeMs / 86164090.5) * Math.PI * 2 + (env.lon || 0) * Math.PI / 180;
+      this.milkyUniforms.uRot.value = rot % (Math.PI * 2);
+      this.stars.rotation.y = rot % (Math.PI * 2); // same sense as the texture lookup above
+    }
 
     this.sun.position.copy(env.sunDir).multiplyScalar(CELESTIAL_DIST);
     this.sunMat.color.copy(g.sunColor);

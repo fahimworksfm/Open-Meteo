@@ -35,6 +35,10 @@ no build step. One static folder.
 - **📖 Logbook.** Seventeen achievements for weather you *witness*: stand in a live
   thunderstorm, find −30 °C, catch 5 m seas, see the midnight sun. Sightings reached
   through the time machine are honestly badged "via time machine".
+  Illustrated badges (in `assets/badges/`) are replacing the emoji one by one.
+- **🌌 Night sky.** On clear nights the Milky Way rises over the horizon behind the
+  stars, fading in with the real sun altitude and cloud cover and turning with the
+  sidereal day.
 - **🎯 Forecast duel.** Call tomorrow's high anywhere on Earth. The model's forecast is
   locked in at the same moment; the recorded actual settles the duel the next day.
   Streaks tracked. Beat the supercomputer.
