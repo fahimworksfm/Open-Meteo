@@ -1,0 +1,15 @@
+# No real build: copy just the web app into dist/ so android/ and docs/ aren't published.
+[build]
+  command = "rm -rf dist && mkdir dist && cp -r index.html css js vendor assets dist/"
+  publish = "dist"
+
+# Images never change in place (new art gets new filenames); cache them for a week.
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=604800"
+
+[[headers]]
+  for = "/vendor/*"
+  [headers.values]
+    Cache-Control = "public, max-age=604800"
